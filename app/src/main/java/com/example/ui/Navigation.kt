@@ -16,6 +16,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -36,12 +41,14 @@ import kotlinx.coroutines.launch
 @Composable
 fun RevelaAppNavigation() {
     val navController = rememberNavController()
+    val updateConfig by RevelaRepository.appUpdateConfig.collectAsState()
 
-    NavHost(
-        navController = navController,
-        startDestination = "splash",
-        modifier = Modifier.fillMaxSize()
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        NavHost(
+            navController = navController,
+            startDestination = "splash",
+            modifier = Modifier.fillMaxSize()
+        ) {
         // 1. Tela Splash
         composable("splash") {
             SplashScreen(
@@ -158,6 +165,70 @@ fun RevelaAppNavigation() {
                 }
             )
         }
+    }
+}
+
+    if (updateConfig.active) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!updateConfig.isMandatory) {
+                    RevelaRepository.dismissUpdate()
+                }
+            },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.CloudDownload,
+                    contentDescription = "Atualizar App",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(40.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = updateConfig.updateTitle,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = updateConfig.updateMessage,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (updateConfig.isMandatory) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "⚠️ Esta é uma atualização obrigatória de segurança e moderação.",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // Simula abertura do link
+                    }
+                ) {
+                    Text("Atualizar Agora")
+                }
+            },
+            dismissButton = {
+                if (!updateConfig.isMandatory) {
+                    TextButton(
+                        onClick = { RevelaRepository.dismissUpdate() }
+                    ) {
+                        Text("Mais Tarde")
+                    }
+                }
+            },
+            shape = RoundedCornerShape(24.dp)
+        )
     }
 }
 

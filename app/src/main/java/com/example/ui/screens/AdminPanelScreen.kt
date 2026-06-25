@@ -28,10 +28,15 @@ import com.example.data.AdminPermissions
 import com.example.data.Conversation
 import com.example.data.RevelaRepository
 import com.example.data.UserProfile
+import com.example.data.UserReport
 import com.example.ui.theme.RevelaCoral
 import com.example.ui.theme.RevelaPurple
 import com.example.ui.theme.RevelaTurquoise
 import com.example.ui.theme.RevelaYellow
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Gavel
 import kotlinx.coroutines.launch
 
 /**
@@ -50,11 +55,12 @@ fun AdminPanelScreen() {
     val conversationsList by RevelaRepository.conversations.collectAsState()
     val postsList by RevelaRepository.posts.collectAsState()
     val messagesMap by RevelaRepository.messages.collectAsState()
+    val reportsList by RevelaRepository.reports.collectAsState()
     val currentUser by RevelaRepository.currentUser.collectAsState()
 
     // Controle de abas
     var selectedTabState by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Usuários 👥", "Conversas 💬", "Posts do Feed 🎭")
+    val tabs = listOf("Usuários 👥", "Denúncias 🚨", "Conversas 💬", "Posts do Feed 🎭", "Atualizações 🚀")
 
     // Estado para saber qual usuário está com o painel de permissões expandido inline
     var expandedUserUidForPermissions by remember { mutableStateOf<String?>(null) }
@@ -513,7 +519,128 @@ fun AdminPanelScreen() {
                     }
                 }
                 1 -> {
-                    // TAB 1: LISTA DE CONVERSAS & LEITOR DE MENSAGENS (Verifica canViewChats)
+                    // TAB 1: LISTA DE DENÚNCIAS & ANÁLISE GEMINI AI
+                    if (reportsList.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("Nenhuma denúncia cadastrada.", color = Color.Gray)
+                        }
+                    } else {
+                        LazyColumn(
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.fillMaxSize().testTag("admin_reports_list")
+                        ) {
+                            items(reportsList) { report ->
+                                val reportedUser = usersMap[report.denunciadoId]
+                                val isBanned = reportedUser?.status == "banido"
+                                
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (report.status.contains("falsa_denuncia")) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                        else if (report.status.contains("válida")) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
+                                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                                    ),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(16.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(16.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    imageVector = if (report.status.contains("falsa_denuncia")) Icons.Default.CheckCircle
+                                                    else if (report.status.contains("válida")) Icons.Default.Warning
+                                                    else Icons.Default.Info,
+                                                    contentDescription = "Status",
+                                                    tint = if (report.status.contains("falsa_denuncia")) Color(0xFF4CAF50)
+                                                    else if (report.status.contains("válida")) MaterialTheme.colorScheme.error
+                                                    else Color.Gray,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = report.status.uppercase(),
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 11.sp,
+                                                    color = if (report.status.contains("falsa_denuncia")) Color(0xFF4CAF50)
+                                                    else if (report.status.contains("válida")) MaterialTheme.colorScheme.error
+                                                    else Color.Gray
+                                                )
+                                            }
+                                            Text(
+                                                text = android.text.format.DateFormat.format("dd/MM HH:mm", report.dataCriacao).toString(),
+                                                fontSize = 10.sp,
+                                                color = Color.Gray
+                                            )
+                                        }
+                                        
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        
+                                        Text(
+                                            text = "Denunciado: ${reportedUser?.nome ?: "Desconhecido"} (@${reportedUser?.apelido ?: "anon"})",
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onBackground
+                                        )
+                                        
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        
+                                        // Motivo / Descrição com quebra de linhas para ler justificativa do Gemini
+                                        Text(
+                                            text = report.motivo,
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f),
+                                            lineHeight = 16.sp
+                                        )
+                                        
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        
+                                        // Ações rápidas sobre o usuário denunciado
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.End,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            if (reportedUser != null && reportedUser.email != "frontwork08@gmail.com") {
+                                                Button(
+                                                    onClick = {
+                                                        coroutineScope.launch {
+                                                            RevelaRepository.toggleBanUser(reportedUser.uid)
+                                                        }
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = if (isBanned) Color.Gray else MaterialTheme.colorScheme.error
+                                                    ),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                                    modifier = Modifier.padding(end = 8.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Gavel,
+                                                        contentDescription = "Banir",
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(14.dp).padding(end = 4.dp)
+                                                    )
+                                                    Text(
+                                                        text = if (isBanned) "Desbanir" else "Banir Infrator",
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color.White
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                2 -> {
+                    // TAB 2: LISTA DE CONVERSAS & LEITOR DE MENSAGENS (Verifica canViewChats)
                     if (!canViewChats) {
                         // Restrição amigável por falta de autoridades
                         Box(
@@ -761,7 +888,7 @@ fun AdminPanelScreen() {
                         }
                     }
                 }
-                2 -> {
+                3 -> {
                     // TAB 2: POSTS DO FEED & EXCLUSÃO (Verifica canDeletePosts)
                     if (postsList.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -859,6 +986,116 @@ fun AdminPanelScreen() {
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+                4 -> {
+                    // TAB 4: ATUALIZAÇÕES DO APP EM TEMPO REAL (Opção 3)
+                    var updateTitleInput by remember { mutableStateOf("Nova Versão Crítica Disponível!") }
+                    var updateMessageInput by remember { mutableStateOf("Lançamos uma atualização crítica na loja de aplicativos para corrigir bugs e melhorar o sistema de moderação assistida por Inteligência Artificial (Gemini). Atualize imediatamente para continuar usando.") }
+                    var isMandatoryInput by remember { mutableStateOf(true) }
+                    val currentUpdateConfig by RevelaRepository.appUpdateConfig.collectAsState()
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp)
+                            .testTag("admin_updates_panel")
+                    ) {
+                        Text(
+                            text = "Controle de Atualização em Tempo Real (Opção 3) 🚀",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Configure e dispare uma notificação/tela de atualização forçada ou opcional que se propaga IMEDIATAMENTE (em tempo real) para todos os usuários ativos do aplicativo.",
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text("Status Atual do Servidor:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("• Alerta Ativo: ${if (currentUpdateConfig.active) "SIM 🟢" else "NÃO 🔴"}", fontSize = 13.sp)
+                                Text("• Tipo de Forçamento: ${if (currentUpdateConfig.isMandatory) "Mandatório (Bloqueante) ⚠️" else "Opcional (Descartável) ✅"}", fontSize = 13.sp)
+                                Text("• Título: ${currentUpdateConfig.updateTitle}", fontSize = 13.sp)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        OutlinedTextField(
+                            value = updateTitleInput,
+                            onValueChange = { updateTitleInput = it },
+                            label = { Text("Título da Atualização") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        OutlinedTextField(
+                            value = updateMessageInput,
+                            onValueChange = { updateMessageInput = it },
+                            label = { Text("Mensagem Explicativa") },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 3
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Checkbox(
+                                checked = isMandatoryInput,
+                                onCheckedChange = { isMandatoryInput = it }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text("Forçar Atualização Mandatória", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("O usuário não poderá ignorar a tela de atualização para continuar navegando.", fontSize = 11.sp, color = Color.Gray)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    RevelaRepository.triggerSimulatedUpdate(
+                                        isMandatory = isMandatoryInput,
+                                        title = updateTitleInput,
+                                        message = updateMessageInput
+                                    )
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                            ) {
+                                Text("Disparar Alerta 🚀")
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    RevelaRepository.dismissUpdate()
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Parar / Resetar 🛑")
                             }
                         }
                     }

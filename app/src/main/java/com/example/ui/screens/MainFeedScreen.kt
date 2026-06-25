@@ -309,7 +309,7 @@ fun PostCard(
                     }
                 }
 
-                Column(modifier = Modifier.padding(start = 12.dp)) {
+                Column(modifier = Modifier.padding(start = 12.dp).weight(1f)) {
                     Text(
                         text = post.autorNome,
                         fontWeight = FontWeight.Bold,
@@ -319,6 +319,72 @@ fun PostCard(
                         text = "@${post.autorApelido} • Filtro: ${post.filterApplied}",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                    )
+                }
+
+                // Botão Seguir / Seguindo (Requisito: Seguidores/Seguindo)
+                val currentUser by RevelaRepository.currentUser.collectAsState()
+                val allFollows by RevelaRepository.follows.collectAsState()
+                val scope = rememberCoroutineScope()
+                var showFollowDialog by remember { mutableStateOf(false) }
+
+                if (currentUser != null && post.usuarioId != currentUser?.uid) {
+                    val isFollowing = allFollows.any { it.followerId == currentUser?.uid && it.followingId == post.usuarioId }
+                    
+                    if (isFollowing) {
+                        TextButton(
+                            onClick = {
+                                scope.launch {
+                                    RevelaRepository.unfollowUser(post.usuarioId)
+                                }
+                            }
+                        ) {
+                            Text("Seguindo ✓", color = Color.Green, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        Button(
+                            onClick = { showFollowDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = RevelaPurple),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            modifier = Modifier.height(30.dp)
+                        ) {
+                            Text("Seguir", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                if (showFollowDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showFollowDialog = false },
+                        title = { Text("Seguir @${post.autorApelido}", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+                        text = {
+                            Text("Escolha se deseja seguir anonimamente ou revelar sua identidade desde já.")
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    showFollowDialog = false
+                                    scope.launch {
+                                        RevelaRepository.followUser(post.usuarioId, isAnonymous = true)
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = RevelaCoral)
+                            ) {
+                                Text("🎭 Anonimamente")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = {
+                                    showFollowDialog = false
+                                    scope.launch {
+                                        RevelaRepository.followUser(post.usuarioId, isAnonymous = false)
+                                    }
+                                }
+                            ) {
+                                Text("👤 Publicamente")
+                            }
+                        }
                     )
                 }
             }

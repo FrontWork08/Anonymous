@@ -127,3 +127,23 @@ data class DailyMission(
     val completed: Boolean,
     val progress: String
 )
+
+data class AppUpdateConfig(
+    val latestVersionCode: Int,
+    val minRequiredVersionCode: Int,
+    val updateUrl: String,
+    val updateTitle: String,
+    val updateMessage: String,
+    val isMandatory: Boolean,
+    val active: Boolean = false
+)
+
+data class FollowRelationship(
+    val followId: String,
+    val followerId: String,
+    val followingId: String,
+    val isAnonymous: Boolean,
+    val isRevealed: Boolean,
+    val timestamp: Date = Date()
+)
+

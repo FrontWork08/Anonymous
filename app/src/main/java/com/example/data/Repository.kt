@@ -42,6 +42,9 @@ object RevelaRepository {
     private val _messages = MutableStateFlow<Map<String, List<ChatMessage>>>(emptyMap()) // Key: conversaId
     val messages: StateFlow<Map<String, List<ChatMessage>>> = _messages.asStateFlow()
 
+    private val _reports = MutableStateFlow<List<UserReport>>(emptyList())
+    val reports: StateFlow<List<UserReport>> = _reports.asStateFlow()
+
     private val _notifications = MutableStateFlow<List<AppNotification>>(emptyList())
     val notifications: StateFlow<List<AppNotification>> = _notifications.asStateFlow()
 
@@ -53,6 +56,136 @@ object RevelaRepository {
 
     private val _typingState = MutableStateFlow<Map<String, Boolean>>(emptyMap()) // Key: conversaId -> IsTyping
     val typingState: StateFlow<Map<String, Boolean>> = _typingState.asStateFlow()
+
+    private val _appUpdateConfig = MutableStateFlow<AppUpdateConfig>(
+        AppUpdateConfig(
+            latestVersionCode = 1,
+            minRequiredVersionCode = 1,
+            updateUrl = "https://example.com/update",
+            updateTitle = "Atualização Disponível",
+            updateMessage = "Uma nova versão do Anonymous está disponível na Play Store com várias correções e o sistema de moderação Gemini AI!",
+            isMandatory = false,
+            active = false
+        )
+    )
+    val appUpdateConfig: StateFlow<AppUpdateConfig> = _appUpdateConfig.asStateFlow()
+
+    fun triggerSimulatedUpdate(isMandatory: Boolean, title: String, message: String) {
+        _appUpdateConfig.value = AppUpdateConfig(
+            latestVersionCode = 2,
+            minRequiredVersionCode = if (isMandatory) 2 else 1,
+            updateUrl = "https://ai.studio/build",
+            updateTitle = title,
+            updateMessage = message,
+            isMandatory = isMandatory,
+            active = true
+        )
+    }
+
+    fun dismissUpdate() {
+        _appUpdateConfig.value = _appUpdateConfig.value.copy(active = false)
+    }
+
+    private val _follows = MutableStateFlow<List<FollowRelationship>>(emptyList())
+    val follows: StateFlow<List<FollowRelationship>> = _follows.asStateFlow()
+
+    suspend fun followUser(targetUid: String, isAnonymous: Boolean): Result<Boolean> {
+        delay(800)
+        val current = _currentUser.value ?: return Result.failure(Exception("Usuário não autenticado."))
+        if (current.uid == targetUid) return Result.failure(Exception("Você não pode seguir a si mesmo."))
+
+        // Verifica se já segue
+        val alreadyFollowing = _follows.value.any { it.followerId == current.uid && it.followingId == targetUid }
+        if (alreadyFollowing) {
+            return Result.failure(Exception("Você já segue este usuário."))
+        }
+
+        val followId = java.util.UUID.randomUUID().toString()
+        val newFollow = FollowRelationship(
+            followId = followId,
+            followerId = current.uid,
+            followingId = targetUid,
+            isAnonymous = isAnonymous,
+            isRevealed = !isAnonymous,
+            timestamp = Date()
+        )
+
+        _follows.value = _follows.value + newFollow
+
+        // Incrementa contadores
+        val targetUser = _users.value[targetUid]
+        if (targetUser != null) {
+            val updatedTarget = targetUser.copy(seguidores = targetUser.seguidores + 1)
+            _users.value = _users.value + (targetUid to updatedTarget)
+        }
+
+        val updatedCurrent = current.copy(seguindo = current.seguindo + 1)
+        _currentUser.value = updatedCurrent
+        _users.value = _users.value + (current.uid to updatedCurrent)
+
+        // Envia notificação
+        sendNotification(
+            usuarioId = targetUid,
+            tipo = "curtida",
+            conteudo = if (isAnonymous) "👤 Um novo usuário começou a te seguir anonimamente!" else "👤 @${current.apelido} começou a te seguir!"
+        )
+
+        return Result.success(true)
+    }
+
+    suspend fun unfollowUser(targetUid: String): Result<Boolean> {
+        delay(800)
+        val current = _currentUser.value ?: return Result.failure(Exception("Usuário não autenticado."))
+        
+        val followRel = _follows.value.find { it.followerId == current.uid && it.followingId == targetUid }
+        if (followRel == null) {
+            return Result.failure(Exception("Você não segue este usuário."))
+        }
+
+        _follows.value = _follows.value.filter { it.followId != followRel.followId }
+
+        // Decrementa contadores
+        val targetUser = _users.value[targetUid]
+        if (targetUser != null) {
+            val updatedTarget = targetUser.copy(seguidores = (targetUser.seguidores - 1).coerceAtLeast(0))
+            _users.value = _users.value + (targetUid to updatedTarget)
+        }
+
+        val updatedCurrent = current.copy(seguindo = (current.seguindo - 1).coerceAtLeast(0))
+        _currentUser.value = updatedCurrent
+        _users.value = _users.value + (current.uid to updatedCurrent)
+
+        return Result.success(true)
+    }
+
+    suspend fun revealFollowIdentity(followId: String): Result<Boolean> {
+        delay(800)
+        val current = _currentUser.value ?: return Result.failure(Exception("Usuário não autenticado."))
+
+        val rel = _follows.value.find { it.followId == followId }
+        if (rel == null) {
+            return Result.failure(Exception("Relação não encontrada."))
+        }
+
+        if (rel.followerId != current.uid) {
+            return Result.failure(Exception("Apenas o seguidor anônimo pode revelar sua identidade."))
+        }
+
+        val updatedRel = rel.copy(isRevealed = true)
+        _follows.value = _follows.value.map { if (it.followId == followId) updatedRel else it }
+
+        // Envia notificação sobre a revelação
+        val targetUser = _users.value[rel.followingId]
+        if (targetUser != null) {
+            sendNotification(
+                usuarioId = rel.followingId,
+                tipo = "match",
+                conteudo = "🎉 O seguidor anônimo se revelou! É o @${current.apelido}!"
+            )
+        }
+
+        return Result.success(true)
+    }
 
     // --- PALAVRAS PROIBIDAS PARA FILTRAGEM (REQUISITO DE SEGURANÇA 6) ---
     private val badWords = listOf("ofensa", "palavrao", "idiota", "lixo", "fake", "spam", "imbecil", "otario")
@@ -389,23 +522,60 @@ object RevelaRepository {
     /**
      * Requisito de Segurança 6: Guarda o IP simulado do remetente
      * e o envia juntamente com a denúncia no servidor.
+     * Agora integrado com o Gemini AI para analisar falsas denúncias de forma inteligente.
      */
     suspend fun reportMessage(mensagemId: String, motivo: String): Result<Boolean> {
         delay(1000)
         val current = _currentUser.value ?: return Result.failure(Exception("Faça login."))
         
+        // Busca a mensagem correspondente no estado local para poder enviar seu texto à IA
+        var conteudoMensagem = "Mensagem não encontrada ou deletada"
+        var denunciadoId = "reported_user_uid"
+        
+        _messages.value.values.flatten().find { it.mensagemId == mensagemId }?.let { msg ->
+            conteudoMensagem = msg.conteudo
+            denunciadoId = msg.remetenteId ?: "reported_user_uid"
+        }
+        
         // Simulação do IP real do remetente para banimento
         val ipSimulado = "192.168.0." + (10..254).random()
+        val reportId = UUID.randomUUID().toString()
         
         val newReport = UserReport(
-            denunciaId = UUID.randomUUID().toString(),
+            denunciaId = reportId,
             denuncianteId = current.uid,
-            denunciadoId = "reported_user_uid",
+            denunciadoId = denunciadoId,
             mensagemId = mensagemId,
-            motivo = motivo + " [IP do Infrator Registrado: $ipSimulado]",
-            status = "pendente",
+            motivo = motivo + " [IP do Infrator Registrado: $ipSimulado] [Mensagem Analisada: \"$conteudoMensagem\"]",
+            status = "pendente (analisando IA... 🤖)",
             dataCriacao = Date()
         )
+        
+        // Adiciona à coleção de denúncias
+        val currentReports = _reports.value.toMutableList()
+        currentReports.add(0, newReport)
+        _reports.value = currentReports
+        
+        // Executa a análise com Gemini em segundo plano
+        scope.launch {
+            try {
+                val analysis = GeminiService.analyzeReport(conteudoMensagem, motivo)
+                val updatedReports = _reports.value.map { rep ->
+                    if (rep.denunciaId == reportId) {
+                        val statusSuffix = if (analysis.isValidReport) "válida (IA) 🚨" else "falsa_denuncia (IA) 🟢"
+                        rep.copy(
+                            status = statusSuffix,
+                            motivo = rep.motivo + "\n\n🤖 CO-PILOTO GEMINI AI MODERAÇÃO:\nResultado: ${if (analysis.isValidReport) "VIOLAÇÃO CONFIRMADA" else "FALSA DENÚNCIA CONFIRMADA"}\nJustificativa: ${analysis.explanation}"
+                        )
+                    } else {
+                        rep
+                    }
+                }
+                _reports.value = updatedReports
+            } catch (e: Exception) {
+                Log.e("Security_Revela", "Erro ao processar análise da IA: ${e.message}")
+            }
+        }
         
         Log.e("Security_Revela", "DENÚNCIA REGISTRADA: Mensagem $mensagemId denunciada. IP guardado para banimento: $ipSimulado")
         return Result.success(true)
@@ -833,5 +1003,51 @@ object RevelaRepository {
             "conv_1" to listOf(msg1, msg2, msg3),
             "conv_2" to listOf(msg4, msg5, msg6)
         )
+
+        // 8. Denúncias Pre-populadas (Demonstração de Moderação com Co-Piloto Gemini AI)
+        val rep1 = UserReport(
+            denunciaId = "rep_1",
+            denuncianteId = "mari_uid",
+            denunciadoId = "lipe_uid",
+            mensagemId = "m2",
+            motivo = "Ofensa verbal direta. [IP do Infrator Registrado: 192.168.0.125] [Mensagem Analisada: \"Valeu Mari! Deu um trabalhão arrumar os cabos kkk\"]",
+            status = "falsa_denuncia (IA) 🟢",
+            dataCriacao = Date(System.currentTimeMillis() - 3600000)
+        )
+        val rep2 = UserReport(
+            denunciaId = "rep_2",
+            denuncianteId = "ana_uid",
+            denunciadoId = "mari_uid",
+            mensagemId = "m_toxic",
+            motivo = "Fingimento de identidade e assédio verbal tóxico. [IP do Infrator Registrado: 192.168.0.210] [Mensagem Analisada: \"sua ridícula de merda, some daqui ninguém quer saber de você\"]",
+            status = "válida (IA) 🚨",
+            dataCriacao = Date(System.currentTimeMillis() - 7200000)
+        )
+        
+        val rep1WithAI = rep1.copy(
+            motivo = rep1.motivo + "\n\n🤖 CO-PILOTO GEMINI AI MODERAÇÃO:\nResultado: FALSA DENÚNCIA CONFIRMADA\nJustificativa: A mensagem analisada ('Valeu Mari! Deu um trabalhão arrumar os cabos kkk') é perfeitamente amigável, expressa gratidão e compartilha uma risada casual sobre a organização de cabos. Não há qualquer indício de ofensa ou violação das diretrizes. A denúncia parece ser infundada ou um erro do denunciante."
+        )
+        
+        val rep2WithAI = rep2.copy(
+            motivo = rep2.motivo + "\n\n🤖 CO-PILOTO GEMINI AI MODERAÇÃO:\nResultado: VIOLAÇÃO CONFIRMADA\nJustificativa: A mensagem ('sua ridícula de merda, some daqui ninguém quer saber de você') viola de forma direta e grave as políticas contra cyberbullying, assédio direcionado e uso de linguagem ofensiva agressiva. Recomenda-se o banimento imediato da conta e o bloqueio do IP (192.168.0.210)."
+        )
+        
+        _reports.value = listOf(rep1WithAI, rep2WithAI)
+
+        // 9. Relações de Seguidores/Seguindo Pre-populadas (Requisito: Seguidores Anônimos)
+        val pFollows = listOf(
+            FollowRelationship("f_1", "mari_uid", "google_user_123", isAnonymous = true, isRevealed = false),
+            FollowRelationship("f_2", "lipe_uid", "google_user_123", isAnonymous = false, isRevealed = true),
+            FollowRelationship("f_3", "ana_uid", "google_user_123", isAnonymous = true, isRevealed = true),
+            FollowRelationship("f_4", "google_user_123", "mari_uid", isAnonymous = false, isRevealed = true),
+            FollowRelationship("f_5", "google_user_123", "lipe_uid", isAnonymous = true, isRevealed = false),
+
+            FollowRelationship("f_1_adm", "mari_uid", "admin_uid_123", isAnonymous = true, isRevealed = false),
+            FollowRelationship("f_2_adm", "lipe_uid", "admin_uid_123", isAnonymous = false, isRevealed = true),
+            FollowRelationship("f_3_adm", "ana_uid", "admin_uid_123", isAnonymous = true, isRevealed = true),
+            FollowRelationship("f_4_adm", "admin_uid_123", "mari_uid", isAnonymous = false, isRevealed = true),
+            FollowRelationship("f_5_adm", "admin_uid_123", "lipe_uid", isAnonymous = true, isRevealed = false)
+        )
+        _follows.value = pFollows
     }
 }

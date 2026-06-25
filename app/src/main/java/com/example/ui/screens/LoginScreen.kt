@@ -200,7 +200,7 @@ fun LoginScreen(
                     CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
                 } else {
                     Text(
-                        text = if (isSignUpMode) "Cadastrar e Revelar" else "Entrar na Rede",
+                        text = if (isSignUpMode) "Criar Conta Segura" else "Entrar na Rede",
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp
                     )

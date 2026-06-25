@@ -4,7 +4,10 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -16,10 +19,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,6 +61,15 @@ fun ProfileScreen(
     val allPosts by RevelaRepository.posts.collectAsState()
     val badges by RevelaRepository.badges.collectAsState()
     val missions by RevelaRepository.missions.collectAsState()
+
+    val allFollows by RevelaRepository.follows.collectAsState()
+    val allUsers by RevelaRepository.users.collectAsState()
+
+    var showFollowersDialog by remember { mutableStateOf(false) }
+    var showFollowingDialog by remember { mutableStateOf(false) }
+
+    val myFollowers = allFollows.filter { it.followingId == currentUser?.uid }
+    val myFollowing = allFollows.filter { it.followerId == currentUser?.uid }
 
     val myPosts = allPosts.filter { it.usuarioId == currentUser?.uid }
 
@@ -144,13 +163,25 @@ fun ProfileScreen(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(text = "${currentUser?.seguidores ?: 100}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .clickable { showFollowersDialog = true }
+                        .padding(8.dp)
+                ) {
+                    val followersCount = if (myFollowers.isNotEmpty()) myFollowers.size else (currentUser?.seguidores ?: 0)
+                    Text(text = "$followersCount", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     Text(text = "Seguidores", fontSize = 12.sp, color = Color.Gray)
                 }
                 VerticalDivider(modifier = Modifier.height(30.dp), color = Color.Gray.copy(alpha = 0.3f))
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(text = "${currentUser?.seguindo ?: 100}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .clickable { showFollowingDialog = true }
+                        .padding(8.dp)
+                ) {
+                    val followingCount = if (myFollowing.isNotEmpty()) myFollowing.size else (currentUser?.seguindo ?: 0)
+                    Text(text = "$followingCount", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     Text(text = "Seguindo", fontSize = 12.sp, color = Color.Gray)
                 }
             }
@@ -354,5 +385,281 @@ fun ProfileScreen(
 
             Spacer(modifier = Modifier.height(48.dp))
         }
+    }
+
+    if (showFollowersDialog) {
+        AlertDialog(
+            onDismissRequest = { showFollowersDialog = false },
+            title = {
+                Text(
+                    text = "Seguidores 👥",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            },
+            text = {
+                if (myFollowers.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Você ainda não tem seguidores.", color = Color.Gray, fontSize = 14.sp)
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(myFollowers) { rel ->
+                            val followerUser = allUsers[rel.followerId]
+                            val isAnon = rel.isAnonymous && !rel.isRevealed
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (isAnon) Color.DarkGray else RevelaPurple.copy(alpha = 0.15f)
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (isAnon) {
+                                        Text("🎭", fontSize = 20.sp)
+                                    } else {
+                                        val foto = followerUser?.fotoPerfil ?: ""
+                                        if (foto.isNotEmpty() && foto != "google_avatar") {
+                                            Image(
+                                                painter = rememberAsyncImagePainter(foto),
+                                                contentDescription = null,
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = ContentScale.Crop
+                                            )
+                                        } else {
+                                            Text(
+                                                text = followerUser?.nome?.firstOrNull()?.uppercase() ?: "?",
+                                                fontWeight = FontWeight.Bold,
+                                                color = RevelaPurple
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.width(12.dp))
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    if (isAnon) {
+                                        Text(
+                                            text = "Seguidor Anônimo",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp
+                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                Icons.Default.Lock,
+                                                contentDescription = null,
+                                                tint = Color.Gray,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "Identidade protegida",
+                                                fontSize = 11.sp,
+                                                color = Color.Gray
+                                            )
+                                        }
+                                    } else {
+                                        Text(
+                                            text = followerUser?.nome ?: "Usuário",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp
+                                        )
+                                        Text(
+                                            text = "@${followerUser?.apelido ?: "anonimo"}",
+                                            fontSize = 12.sp,
+                                            color = Color.Gray
+                                        )
+                                        if (rel.isAnonymous && rel.isRevealed) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    Icons.Default.CheckCircle,
+                                                    contentDescription = null,
+                                                    tint = RevelaCoral,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "Revelado voluntariamente!",
+                                                    fontSize = 10.sp,
+                                                    color = RevelaCoral,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showFollowersDialog = false }) {
+                    Text("Fechar")
+                }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
+    if (showFollowingDialog) {
+        val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+        AlertDialog(
+            onDismissRequest = { showFollowingDialog = false },
+            title = {
+                Text(
+                    text = "Seguindo 👥",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            },
+            text = {
+                if (myFollowing.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Você não segue ninguém ainda.", color = Color.Gray, fontSize = 14.sp)
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(myFollowing) { rel ->
+                            val followedUser = allUsers[rel.followingId]
+                            var isRevealingInProgress by remember { mutableStateOf(false) }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .clip(CircleShape)
+                                        .background(RevelaPurple.copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    val foto = followedUser?.fotoPerfil ?: ""
+                                    if (foto.isNotEmpty() && foto != "google_avatar") {
+                                        Image(
+                                            painter = rememberAsyncImagePainter(foto),
+                                            contentDescription = null,
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    } else {
+                                        Text(
+                                            text = followedUser?.nome?.firstOrNull()?.uppercase() ?: "?",
+                                            fontWeight = FontWeight.Bold,
+                                            color = RevelaPurple
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.width(12.dp))
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = followedUser?.nome ?: "Usuário",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                    Text(
+                                        text = "@${followedUser?.apelido ?: "anonimo"}",
+                                        fontSize = 12.sp,
+                                        color = Color.Gray
+                                    )
+
+                                    if (rel.isAnonymous) {
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        if (rel.isRevealed) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    Icons.Default.CheckCircle,
+                                                    contentDescription = null,
+                                                    tint = Color.Green,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "Sua identidade foi revelada!",
+                                                    fontSize = 10.sp,
+                                                    color = Color.Green,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        } else {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    Icons.Default.Visibility,
+                                                    contentDescription = null,
+                                                    tint = RevelaCoral,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "Seguindo de forma anônima",
+                                                    fontSize = 10.sp,
+                                                    color = RevelaCoral
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (rel.isAnonymous && !rel.isRevealed) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    if (isRevealingInProgress) {
+                                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                    } else {
+                                        Button(
+                                            onClick = {
+                                                isRevealingInProgress = true
+                                                coroutineScope.launch {
+                                                    val result = RevelaRepository.revealFollowIdentity(rel.followId)
+                                                    isRevealingInProgress = false
+                                                }
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = RevelaCoral),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                            modifier = Modifier.height(28.dp)
+                                        ) {
+                                            Text("Revelar 🔓", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showFollowingDialog = false }) {
+                    Text("Fechar")
+                }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
     }
 }
