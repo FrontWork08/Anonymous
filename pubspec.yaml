@@ -1,0 +1,48 @@
+name: revela
+description: "Revela - Rede social para fazer amizades através de mensagens anônimas e públicas."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase Core e Auth
+  firebase_core: ^2.24.0
+  firebase_auth: ^4.15.0
+  google_sign_in: ^6.1.6
+
+  # Firestore (Banco NoSQL do perfil, posts, etc)
+  cloud_firestore: ^4.13.0
+
+  # Realtime Database (Chat em tempo real ultra responsivo)
+  firebase_database: ^10.3.7
+
+  # Firebase Storage (Armazenamento de fotos e áudios)
+  firebase_storage: ^11.5.6
+
+  # Gerenciamento de Estado (Padrão GetX solicitado)
+  get: ^4.6.6
+
+  # Componentes Visuais Premium
+  cached_network_image: ^3.3.1
+  flutter_spinkit: ^5.2.0
+  intl: ^0.19.0
+  uuid: ^4.3.3
+  image_picker: ^1.0.7
+  crypto: ^3.0.3 # Criptografia ponta-a-ponta de mensagens no servidor
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/icons/

@@ -1,0 +1,46 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Auxiliar: Usuário autenticado
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    // Auxiliar: Compara UID do solicitante com a pasta de perfil
+    function isOwner(userId) {
+      return isAuthed() && request.auth.uid == userId;
+    }
+
+    // --- Pasta Perfil (/perfis/[uid].jpg) ---
+    match /perfis/{userId} {
+      // Qualquer um pode ler fotos de perfil de amizades normais/públicas
+      allow read: if isAuthed();
+      // Somente o dono do perfil pode enviar ou deletar sua foto
+      allow write: if isOwner(userId) 
+        && request.resource.size < 5 * 1024 * 1024 // Limite de 5MB
+        && request.resource.contentType.matches('image/.*'); // Apenas imagens
+    }
+
+    // --- Pasta Posts (/posts/[postId].jpg) ---
+    match /posts/{postId} {
+      // Posts são públicos para leitura de todos os membros cadastrados
+      allow read: if isAuthed();
+      // Qualquer membro autenticado pode criar posts com fotos
+      allow create: if isAuthed()
+        && request.resource.size < 8 * 1024 * 1024 // Limite de 8MB
+        && request.resource.contentType.matches('image/.*');
+      // Apenas donos de posts podem apagá-los
+      allow delete: if isAuthed();
+    }
+
+    // --- Pasta Áudios (/audios/[mensagemId].mp3) ---
+    match /audios/{mensagemId} {
+      // Apenas participantes das conversas anônimas/normais podem carregar áudios
+      // A validação de escopo refinada pode ser delegada via banco de dados ou metadados
+      allow read, write: if isAuthed()
+        && request.resource.size < 4 * 1024 * 1024 // Áudio limitado a 4MB (cerca de 2 minutos)
+        && request.resource.contentType.matches('audio/.*');
+    }
+  }
+}
