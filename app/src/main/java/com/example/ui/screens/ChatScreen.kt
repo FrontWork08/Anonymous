@@ -466,7 +466,7 @@ fun ChatScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "🔒 Nota de segurança: O Revela registrará o IP do remetente junto com a denúncia para moderação e banimento completo do dispositivo se for reincidente.",
+                        text = "🔒 Nota de segurança: O Anonymous registrará o IP do remetente junto com a denúncia para moderação e banimento completo do dispositivo se for reincidente.",
                         fontSize = 10.sp,
                         color = RevelaCoral,
                         fontWeight = FontWeight.SemiBold

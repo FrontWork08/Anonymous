@@ -77,10 +77,10 @@ fun MainFeedScreen(
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("R", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                            Text("A", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                         }
                         Text(
-                            text = "Revela",
+                            text = "Anonymous",
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onBackground,
                             fontSize = 20.sp,

@@ -67,7 +67,7 @@ fun SplashScreen(onSplashComplete: () -> Unit) {
             
             // Título Principal
             Text(
-                text = "Revela",
+                text = "Anonymous",
                 fontSize = 46.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,

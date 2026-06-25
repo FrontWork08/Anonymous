@@ -78,7 +78,7 @@ object RevelaRepository {
                     nome = "Administrador",
                     apelido = "admin",
                     email = email,
-                    bio = "Painel de Controle do Aplicativo Revela",
+                    bio = "Painel de Controle do Aplicativo Anonymous",
                     isAdmin = true,
                     adminPermissions = AdminPermissions(
                         canBanUsers = true,
@@ -183,7 +183,7 @@ object RevelaRepository {
             nome = nome,
             apelido = apelido,
             email = email,
-            bio = "Olá! Acabei de me juntar ao Revela 🎭"
+            bio = "Olá! Acabei de me juntar ao Anonymous 🎭"
         )
         addUserToDatabase(newUser)
         _currentUser.value = newUser

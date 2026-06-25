@@ -71,7 +71,7 @@ fun LoginScreen(
             )
 
             Text(
-                text = "Revela",
+                text = "Anonymous",
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,
@@ -273,7 +273,7 @@ fun LoginScreen(
 
             // Termos de Uso
             Text(
-                text = "Ao continuar, você concorda com os nossos Termos de Uso e Políticas de Privacidade de dados criptografados do Revela.",
+                text = "Ao continuar, você concorda com os nossos Termos de Uso e Políticas de Privacidade de dados criptografados do Anonymous.",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
                 textAlign = TextAlign.Center,

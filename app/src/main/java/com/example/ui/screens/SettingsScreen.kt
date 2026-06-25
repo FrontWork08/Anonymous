@@ -185,7 +185,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(24.dp))
             
             Text(
-                text = "Revela App v1.0.0 • Desenvolvido com Kotlin & Jetpack Compose",
+                text = "Anonymous App v1.0.0 • Desenvolvido com Kotlin & Jetpack Compose",
                 fontSize = 11.sp,
                 color = Color.Gray,
                 textAlign = TextAlign.Center,
@@ -200,7 +200,7 @@ fun SettingsScreen(
             onDismissRequest = { showDeleteAlert = false },
             title = { Text("Excluir Conta Permanentemente?") },
             text = {
-                Text("Atenção: Esta ação é irreversível e apagará todas as suas postagens, fotos no Storage e mensagens seguras criptografadas do Revela.")
+                Text("Atenção: Esta ação é irreversível e apagará todas as suas postagens, fotos no Storage e mensagens seguras criptografadas do Anonymous.")
             },
             confirmButton = {
                 Button(
