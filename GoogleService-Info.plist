@@ -15,9 +15,9 @@
 	<key>BUNDLE_ID</key>
 	<string>com.example.revela</string>
 	<key>PROJECT_ID</key>
-	<string>revela-app-mock</string>
+	<string>anonymous-1910</string>
 	<key>STORAGE_BUCKET</key>
-	<string>revela-app-mock.appspot.com</string>
+	<string>anonymous-1910.appspot.com</string>
 	<key>IS_ADS_ENABLED</key>
 	<false/>
 	<key>IS_ANALYTICS_ENABLED</key>
