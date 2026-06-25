@@ -7,6 +7,13 @@ import java.util.Date
  * Representam exatamente a estrutura solicitada para o Firestore.
  */
 
+data class AdminPermissions(
+    val canBanUsers: Boolean = false,
+    val canViewChats: Boolean = false,
+    val canDeletePosts: Boolean = false,
+    val canManageAdmins: Boolean = false
+)
+
 data class UserProfile(
     val uid: String,
     val nome: String,
@@ -28,7 +35,8 @@ data class UserProfile(
     val bloqueados: List<String> = emptyList(),
     val denuncias: Int = 0,
     val status: String = "ativo", // ativo ou banido
-    val isAdmin: Boolean = false
+    val isAdmin: Boolean = false,
+    val adminPermissions: AdminPermissions = AdminPermissions()
 )
 
 data class FeedPost(

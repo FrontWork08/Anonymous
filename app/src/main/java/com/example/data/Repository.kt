@@ -79,11 +79,25 @@ object RevelaRepository {
                     apelido = "admin",
                     email = email,
                     bio = "Painel de Controle do Aplicativo Revela",
-                    isAdmin = true
+                    isAdmin = true,
+                    adminPermissions = AdminPermissions(
+                        canBanUsers = true,
+                        canViewChats = true,
+                        canDeletePosts = true,
+                        canManageAdmins = true
+                    )
                 )
                 addUserToDatabase(adminUser)
-            } else if (!adminUser.isAdmin) {
-                adminUser = adminUser.copy(isAdmin = true)
+            } else if (!adminUser.isAdmin || !adminUser.adminPermissions.canManageAdmins) {
+                adminUser = adminUser.copy(
+                    isAdmin = true,
+                    adminPermissions = AdminPermissions(
+                        canBanUsers = true,
+                        canViewChats = true,
+                        canDeletePosts = true,
+                        canManageAdmins = true
+                    )
+                )
                 addUserToDatabase(adminUser)
             }
             _currentUser.value = adminUser
@@ -111,9 +125,24 @@ object RevelaRepository {
         val email = "frontwork08@gmail.com"
         val existingUser = _users.value.values.find { it.email == email }
         if (existingUser != null) {
-            _currentUser.value = existingUser
+            val updatedUser = if (!existingUser.isAdmin || !existingUser.adminPermissions.canManageAdmins) {
+                val updated = existingUser.copy(
+                    isAdmin = true,
+                    adminPermissions = AdminPermissions(
+                        canBanUsers = true,
+                        canViewChats = true,
+                        canDeletePosts = true,
+                        canManageAdmins = true
+                    )
+                )
+                addUserToDatabase(updated)
+                updated
+            } else {
+                existingUser
+            }
+            _currentUser.value = updatedUser
             updateMissionsProgress()
-            return Result.success(existingUser)
+            return Result.success(updatedUser)
         }
         
         // Se novo, registra perfil com as credenciais do Google
@@ -125,7 +154,14 @@ object RevelaRepository {
             bio = "Criando conexões autênticas e seguras.",
             cidade = "São Paulo",
             estado = "SP",
-            fotoPerfil = "google_avatar"
+            fotoPerfil = "google_avatar",
+            isAdmin = true,
+            adminPermissions = AdminPermissions(
+                canBanUsers = true,
+                canViewChats = true,
+                canDeletePosts = true,
+                canManageAdmins = true
+            )
         )
         addUserToDatabase(newUser)
         _currentUser.value = newUser
@@ -580,6 +616,22 @@ object RevelaRepository {
         // Se banido, remove da sessão atual se for o usuário ativo
         if (newStatus == "banido" && _currentUser.value?.uid == uidToBan) {
             _currentUser.value = null
+        }
+        return Result.success(true)
+    }
+
+    suspend fun updateAdminPermissions(uid: String, isAdmin: Boolean, permissions: AdminPermissions): Result<Boolean> {
+        delay(600)
+        val user = _users.value[uid] ?: return Result.failure(Exception("Usuário não encontrado."))
+        val updatedUser = user.copy(
+            isAdmin = isAdmin,
+            adminPermissions = if (isAdmin) permissions else AdminPermissions()
+        )
+        _users.value = _users.value + (uid to updatedUser)
+        
+        // Se for o usuário atualmente logado, atualiza o estado de currentUser
+        if (_currentUser.value?.uid == uid) {
+            _currentUser.value = updatedUser
         }
         return Result.success(true)
     }

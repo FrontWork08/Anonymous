@@ -1,5 +1,5 @@
 {
-  "name": "Anonymous",
+  "name": "Revela",
   "description": "Uma rede social vibrante para fazer amizades através de mensagens anônimas e públicas, com feed, chat tempo real e revelação de identidade.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
