@@ -33,6 +33,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -64,12 +65,15 @@ fun ProfileScreen(
 
     val allFollows by RevelaRepository.follows.collectAsState()
     val allUsers by RevelaRepository.users.collectAsState()
+    val conversations by RevelaRepository.conversations.collectAsState()
 
     var showFollowersDialog by remember { mutableStateOf(false) }
     var showFollowingDialog by remember { mutableStateOf(false) }
+    var showPremiumDialog by remember { mutableStateOf(false) }
 
     val myFollowers = allFollows.filter { it.followingId == currentUser?.uid }
     val myFollowing = allFollows.filter { it.followerId == currentUser?.uid }
+    val activeStreaksCount = conversations.count { it.streakCount > 0 }
 
     val myPosts = allPosts.filter { it.usuarioId == currentUser?.uid }
 
@@ -101,10 +105,19 @@ fun ProfileScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Foto de perfil com iniciais ou foto real
+            val isPremium = currentUser?.isPremium == true
             Box(
                 modifier = Modifier
                     .size(110.dp)
-                    .border(3.dp, RevelaPurple, CircleShape)
+                    .border(
+                        width = 3.5.dp,
+                        brush = if (isPremium) {
+                            Brush.sweepGradient(listOf(Color(0xFFFFD700), Color(0xFFFFA500), Color(0xFFFFD700)))
+                        } else {
+                            Brush.linearGradient(listOf(RevelaPurple, RevelaPurple))
+                        },
+                        shape = CircleShape
+                    )
                     .padding(4.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceVariant),
@@ -122,16 +135,17 @@ fun ProfileScreen(
                         text = currentUser?.nome?.firstOrNull()?.toString()?.uppercase() ?: "R",
                         fontSize = 36.sp,
                         fontWeight = FontWeight.Bold,
-                        color = RevelaPurple
+                        color = if (isPremium) Color(0xFFFFD700) else RevelaPurple
                     )
                 }
             }
 
             Text(
-                text = currentUser?.nome ?: "Usuário",
+                text = (currentUser?.nome ?: "Usuário") + if (isPremium) " 👑" else "",
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 12.dp)
+                modifier = Modifier.padding(top = 12.dp),
+                color = if (isPremium) Color(0xFFFFD700) else MaterialTheme.colorScheme.onBackground
             )
 
             Text(
@@ -156,12 +170,58 @@ fun ProfileScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            // REQUISITO 3: PROGRESSO DE XP E NÍVEIS (GAMIFICAÇÃO)
+            val currentLevel = currentUser?.nivel ?: 1
+            val currentXp = currentUser?.xp ?: 0
+            val xpNeeded = currentLevel * 250
+            val progressPercent = currentXp.toFloat() / xpNeeded
 
-            // Estatísticas (Seguidores / Seguindo)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp)
+                    .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(14.dp)),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Nível $currentLevel",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = RevelaYellow
+                        )
+                        Text(
+                            text = "$currentXp / $xpNeeded XP",
+                            fontSize = 11.sp,
+                            color = Color.LightGray
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { progressPercent },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        color = RevelaYellow,
+                        trackColor = Color.Gray.copy(alpha = 0.2f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Estatísticas (Seguidores / Foguinhos / Seguindo)
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -171,9 +231,17 @@ fun ProfileScreen(
                 ) {
                     val followersCount = if (myFollowers.isNotEmpty()) myFollowers.size else (currentUser?.seguidores ?: 0)
                     Text(text = "$followersCount", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    Text(text = "Seguidores", fontSize = 12.sp, color = Color.Gray)
+                    Text(text = "Seguidores", fontSize = 11.sp, color = Color.Gray)
                 }
-                VerticalDivider(modifier = Modifier.height(30.dp), color = Color.Gray.copy(alpha = 0.3f))
+                VerticalDivider(modifier = Modifier.height(24.dp), color = Color.Gray.copy(alpha = 0.3f))
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(8.dp)
+                ) {
+                    Text(text = "$activeStreaksCount 🔥", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = RevelaCoral)
+                    Text(text = "Foguinhos", fontSize = 11.sp, color = Color.Gray)
+                }
+                VerticalDivider(modifier = Modifier.height(24.dp), color = Color.Gray.copy(alpha = 0.3f))
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
@@ -182,7 +250,7 @@ fun ProfileScreen(
                 ) {
                     val followingCount = if (myFollowing.isNotEmpty()) myFollowing.size else (currentUser?.seguindo ?: 0)
                     Text(text = "$followingCount", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    Text(text = "Seguindo", fontSize = 12.sp, color = Color.Gray)
+                    Text(text = "Seguindo", fontSize = 11.sp, color = Color.Gray)
                 }
             }
 
@@ -201,6 +269,102 @@ fun ProfileScreen(
                 Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Editar Perfil", fontWeight = FontWeight.Bold)
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // REQUISITO 8: MONETIZAÇÃO FUTURA / PERFIL PREMIUM
+            if (!isPremium) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showPremiumDialog = true }
+                        .border(1.dp, Color(0xFFFFD700).copy(alpha = 0.5f), RoundedCornerShape(12.dp)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFD700).copy(alpha = 0.08f)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Text("✨", fontSize = 22.sp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text("Ativar Revela Premium 👑", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFFFFD700))
+                                Text("Destrave fones de ouvido, reveal instantâneo e borda dourada!", fontSize = 11.sp, color = Color.LightGray)
+                            }
+                        }
+                        Text("➡️", fontSize = 16.sp, color = Color(0xFFFFD700))
+                    }
+                }
+            } else {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, Color(0xFFFFD700), RoundedCornerShape(12.dp)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFD700).copy(alpha = 0.15f)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("👑", fontSize = 22.sp)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text("Membro Revela Premium Ativo!", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFFFFD700))
+                            Text("Seus superpoderes de anonimato e revelação estão liberados.", fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
+                        }
+                    }
+                }
+            }
+
+            if (showPremiumDialog) {
+                AlertDialog(
+                    onDismissRequest = { showPremiumDialog = false },
+                    title = {
+                        Text(
+                            text = "Assinar Revela Premium 👑",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            color = Color(0xFFFFD700)
+                        )
+                    },
+                    text = {
+                        Column {
+                            Text(
+                                text = "Seja o mestre do mistério! Ao assinar o Revela Premium por apenas R$ 9,90/mês, você garante:",
+                                fontSize = 13.sp,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("🎭 Revelação Imediata: Descubra identidades 2x mais rápido.", fontSize = 12.sp, color = Color.LightGray)
+                            Text("📞 Fone Premium: Libere ligações de voz no chat antes do nível 5.", fontSize = 12.sp, color = Color.LightGray)
+                            Text("🎨 Customização Dourada: Glow dourado no seu avatar e coroa real.", fontSize = 12.sp, color = Color.LightGray)
+                            Text("💡 Radar Afinidade: Sugestões extras de descoberta com 95%+ compatibilidade.", fontSize = 12.sp, color = Color.LightGray)
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                RevelaRepository.setPremiumStatus(true)
+                                showPremiumDialog = false
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Assinar por R$ 9,90/mês 💳", fontWeight = FontWeight.Bold, color = Color.Black)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showPremiumDialog = false }) {
+                            Text("Depois", color = Color.Gray)
+                        }
+                    },
+                    shape = RoundedCornerShape(20.dp)
+                )
             }
 
             Spacer(modifier = Modifier.height(20.dp))

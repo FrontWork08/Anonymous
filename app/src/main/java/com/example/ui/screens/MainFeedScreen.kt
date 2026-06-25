@@ -35,6 +35,7 @@ import com.example.data.RevelaRepository
 import com.example.data.UserProfile
 import com.example.ui.theme.RevelaCoral
 import com.example.ui.theme.RevelaPurple
+import com.example.ui.theme.RevelaTurquoise
 import com.example.ui.theme.RevelaYellow
 import kotlinx.coroutines.launch
 
@@ -196,6 +197,107 @@ fun MainFeedScreen(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
+                        }
+                    }
+                }
+                
+                // REQUISITO 2: ALGORITMO DE DESCOBERTA POR AFINIDADE
+                Text(
+                    text = "✨ Descoberta por Afinidade",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = RevelaYellow,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+                Text(
+                    text = "Pessoas sintonizadas com seus interesses e vibes em comum.",
+                    fontSize = 11.sp,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
+                )
+
+                val recommendedUsers = remember(users, currentUser) {
+                    users.values.filter { it.uid != currentUser?.uid }
+                        .map { other ->
+                            val score = RevelaRepository.getCompatibilityScore(currentUser, other)
+                            other to score
+                        }
+                        .sortedByDescending { it.second }
+                }
+
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp)
+                ) {
+                    items(recommendedUsers) { (recUser, score) ->
+                        Card(
+                            modifier = Modifier
+                                .width(170.dp)
+                                .clickable { onNavigateToChatWithUser(recUser) }
+                                .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp)),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .background(RevelaTurquoise.copy(alpha = 0.15f), CircleShape)
+                                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "$score% Afinidade",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = RevelaTurquoise
+                                    )
+                                }
+                                
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                Text(
+                                    text = "@${recUser.apelido}",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                
+                                Spacer(modifier = Modifier.height(6.dp))
+                                
+                                // Interesses em comum
+                                val shared = recUser.interesses.filter { currentUser?.interesses?.contains(it) == true }
+                                val displayTag = if (shared.isNotEmpty()) "🤝 ${shared.first()}" else "✨ ${recUser.vibes.first()}"
+                                
+                                Box(
+                                    modifier = Modifier
+                                        .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                        .widthIn(max = 140.dp)
+                                ) {
+                                    Text(
+                                        text = displayTag,
+                                        fontSize = 10.sp,
+                                        color = Color.LightGray,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                Text(
+                                    text = "Revelação Gradual Ativa",
+                                    fontSize = 8.sp,
+                                    color = Color.Gray
+                                )
+                            }
                         }
                     }
                 }

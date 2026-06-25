@@ -28,6 +28,7 @@ data class UserProfile(
     val sobreMim: String = "",
     val fotoPerfil: String = "", // URL ou iniciais decoradas
     val vibes: List<String> = listOf("🎵 Música", "🎮 Games", "📚 Leitura"),
+    val interesses: List<String> = listOf("Tecnologia", "Café", "Séries", "Viagem"),
     val seguidores: Int = 124,
     val seguindo: Int = 89,
     val dataCriacao: Date = Date(),
@@ -36,7 +37,10 @@ data class UserProfile(
     val denuncias: Int = 0,
     val status: String = "ativo", // ativo ou banido
     val isAdmin: Boolean = false,
-    val adminPermissions: AdminPermissions = AdminPermissions()
+    val adminPermissions: AdminPermissions = AdminPermissions(),
+    val xp: Int = 350,
+    val nivel: Int = 2,
+    val isPremium: Boolean = false
 )
 
 data class FeedPost(
@@ -76,7 +80,11 @@ data class Conversation(
     val criadoEm: Date = Date(),
     val revelouUid1: Boolean = false,
     val revelouUid2: Boolean = false,
-    val unreadCount: Int = 0
+    val unreadCount: Int = 0,
+    val streakCount: Int = 0,
+    val trustLevel: Int = 1,
+    val solicitouRevelacaoUid1: Boolean = false,
+    val solicitouRevelacaoUid2: Boolean = false
 )
 
 data class ChatMessage(
@@ -87,9 +95,15 @@ data class ChatMessage(
     val isAnonimo: Boolean = false,
     val iconeAnonimo: String = "🎭",
     val lida: Boolean = false,
-    val tipo: String = "texto", // 'texto' ou 'audio'
+    val tipo: String = "texto", // 'texto', 'audio', 'imagem_preset', 'enquete'
     val audioUrl: String = "",
-    val dataEnvio: Date = Date()
+    val dataEnvio: Date = Date(),
+    val replyToId: String? = null,
+    val replyToText: String? = null,
+    val reactions: Map<String, String> = emptyMap(), // Key: userId -> Emoji string (e.g. "❤️")
+    val pollQuestion: String? = null,
+    val pollOptions: List<String> = emptyList(),
+    val pollVotes: Map<String, Int> = emptyMap() // Key: userId -> Option index
 )
 
 data class AppNotification(

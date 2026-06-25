@@ -30,6 +30,7 @@ import coil.compose.rememberAsyncImagePainter
 import com.example.data.Conversation
 import com.example.data.RevelaRepository
 import com.example.ui.theme.ImmersiveLavender
+import com.example.ui.theme.RevelaCoral
 import com.example.ui.theme.RevelaPurple
 import com.example.ui.theme.RevelaTurquoise
 import com.example.ui.theme.RevelaYellow
@@ -111,6 +112,91 @@ fun ConversationsScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    // REQUISITO 5: EVENTOS SEMANAIS E DESAFIOS TEMÁTICOS
+                    item {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp)
+                                .border(1.dp, Color(0xFFFFB703).copy(alpha = 0.3f), RoundedCornerShape(16.dp)),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFB703).copy(alpha = 0.08f)),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .background(RevelaPurple, RoundedCornerShape(6.dp))
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = "🎪 EVENTO SEMANAL",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                    }
+                                    Text(
+                                        text = "⏳ Termina em 3d",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFFFB703)
+                                    )
+                                }
+                                
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                Text(
+                                    text = "Noite de Máscaras & Sintonia Dupla 🎭",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = Color.White
+                                )
+                                
+                                Spacer(modifier = Modifier.height(4.dp))
+                                
+                                Text(
+                                    text = "Desafio Temático: Envie pelo menos 5 mensagens em qualquer chat anônimo hoje para liberar medalhas raras e bônus de unmasking!",
+                                    fontSize = 11.sp,
+                                    color = Color.LightGray,
+                                    lineHeight = 16.sp
+                                )
+                                
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Prêmio Exclusivo: Medalha Máscara Rara 🏅",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = RevelaYellow
+                                    )
+                                    
+                                    Box(
+                                        modifier = Modifier
+                                            .background(Color.White.copy(alpha = 0.1f), CircleShape)
+                                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = "Dobro de XP Ativo",
+                                            fontSize = 9.sp,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     items(conversations) { conversa ->
                         // Busca o outro participante da conversa
                         val outroParticipanteId = conversa.participantes.find { it != currentUser?.uid } ?: ""
@@ -191,12 +277,24 @@ fun ConversationsScreen(
                                     } else {
                                         if (isAnonima) "Alguém Anônimo" else (outroUser?.nome ?: "Usuário")
                                     }
-                                    Text(
-                                        text = displayName,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp,
-                                        color = if (isAnonima && currentUser?.isAdmin != true) RevelaYellow else MaterialTheme.colorScheme.onBackground
-                                    )
+                                    val streak = conversa.streakCount
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = displayName,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp,
+                                            color = if (isAnonima && currentUser?.isAdmin != true) RevelaYellow else MaterialTheme.colorScheme.onBackground
+                                        )
+                                        if (streak > 0) {
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "🔥 $streak",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                color = RevelaCoral
+                                            )
+                                        }
+                                    }
                                     
                                     Text(
                                         text = timeFormatter.format(conversa.ultimaMensagemData),
@@ -251,13 +349,45 @@ fun ConversationsScreen(
                                         }
                                     }
 
-                                    // Badge de Progresso (Modo Surpresa)
+                                    // Badge de Progresso (Modo Surpresa) & Afinidade
                                     if (isAnonima && !conversa.matchRevelado) {
-                                        Box(
-                                            modifier = Modifier
-                                                .background(RevelaPurple.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
-                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
+                                            val compatibility = RevelaRepository.getCompatibilityScore(currentUser, outroUser)
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(RevelaTurquoise.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    text = "🤝 $compatibility% afinidade",
+                                                    fontSize = 8.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = RevelaTurquoise
+                                                )
+                                            }
+                                            
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(RevelaPurple.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    text = "Confiança: ${conversa.trustLevel}/5 🎭",
+                                                    fontSize = 8.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = ImmersiveLavender
+                                                )
+                                            }
+                                        }
+                                        if (false) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(RevelaPurple.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
                                             Text(
                                                 text = "Progresso: ${minOf(messageCount, 5)}/5 🎭",
                                                 fontSize = 8.sp,

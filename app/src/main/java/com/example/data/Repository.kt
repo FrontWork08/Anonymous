@@ -371,6 +371,13 @@ object RevelaRepository {
         return Result.success(updated)
     }
 
+    fun setPremiumStatus(isPremium: Boolean) {
+        val current = _currentUser.value ?: return
+        val updated = current.copy(isPremium = isPremium)
+        _currentUser.value = updated
+        _users.value = _users.value + (current.uid to updated)
+    }
+
     // --- 3. SISTEMA DE FEED E POSTS (MOCK FIRESTORE) ---
 
     suspend fun createPost(imagemUrl: String, legenda: String, filterName: String, permiteAnonimos: Boolean): Result<FeedPost> {
@@ -473,13 +480,69 @@ object RevelaRepository {
 
     // --- 4. SISTEMA DE MENSAGENS CHAT & MODO SURPRESA ---
 
-    suspend fun sendMessage(conversaId: String, texto: String, isAudio: Boolean = false, audioLocalPath: String = ""): Result<ChatMessage> {
+    fun addXp(amount: Int) {
+        val current = _currentUser.value ?: return
+        val newXp = current.xp + amount
+        val currentLevel = current.nivel
+        val xpNeeded = currentLevel * 250
+        if (newXp >= xpNeeded) {
+            val updatedUser = current.copy(
+                xp = newXp - xpNeeded,
+                nivel = currentLevel + 1
+            )
+            _currentUser.value = updatedUser
+            _users.value = _users.value + (current.uid to updatedUser)
+            
+            sendNotification(
+                usuarioId = current.uid,
+                tipo = "match",
+                conteudo = "🎉 Parabéns! Você subiu para o Nível ${currentLevel + 1}! Novas conquistas e personalizações estão desbloqueadas. ✨"
+            )
+        } else {
+            val updatedUser = current.copy(xp = newXp)
+            _currentUser.value = updatedUser
+            _users.value = _users.value + (current.uid to updatedUser)
+        }
+    }
+
+    fun getCompatibilityScore(user1: UserProfile?, user2: UserProfile?): Int {
+        if (user1 == null || user2 == null) return 50
+        var matches = 0
+        val totalInterests = (user1.interesses + user2.interesses).distinct().size
+        if (totalInterests == 0) return 60
+
+        user1.interesses.forEach { item ->
+            if (user2.interesses.contains(item)) {
+                matches += 2
+            }
+        }
+        user1.vibes.forEach { item ->
+            if (user2.vibes.contains(item)) {
+                matches += 1
+            }
+        }
+
+        val percentage = ((matches.toFloat() / (user1.interesses.size + user1.vibes.size)) * 100).toInt()
+        return percentage.coerceIn(45, 99) // score stays between 45% and 99% for realism
+    }
+
+    suspend fun sendMessage(
+        conversaId: String, 
+        texto: String, 
+        isAudio: Boolean = false, 
+        audioLocalPath: String = "",
+        replyToId: String? = null,
+        replyToText: String? = null,
+        tipo: String = "texto",
+        pollQuestion: String? = null,
+        pollOptions: List<String> = emptyList()
+    ): Result<ChatMessage> {
         val current = _currentUser.value ?: return Result.failure(Exception("Faça login."))
         val conversa = _conversations.value.find { it.conversaId == conversaId } ?: return Result.failure(Exception("Conversa não encontrada."))
 
         // Aplica filtro de profanidade se o chat for anônimo (Requisito 6)
         val isAnonimoChat = conversa.tipo == "anonimo"
-        val filteredText = if (isAnonimoChat) applyProfanityFilter(texto) else texto
+        val filteredText = if (isAnonimoChat && tipo == "texto") applyProfanityFilter(texto) else texto
 
         // Encriptação simulada em servidor (Requisito 5)
         Log.d("Security_Revela", "Criptografando mensagem no servidor para conversa $conversaId...")
@@ -488,12 +551,17 @@ object RevelaRepository {
             mensagemId = UUID.randomUUID().toString(),
             conversaId = conversaId,
             remetenteId = if (isAnonimoChat && !conversa.matchRevelado) null else current.uid,
-            conteudo = if (isAudio) "🎵 Mensagem de Voz" else filteredText,
+            conteudo = if (tipo == "audio") "🎵 Mensagem de Voz" else if (tipo == "enquete") "📊 Enquete: $pollQuestion" else if (tipo == "imagem_preset") "🖼️ Imagem Compartilhada" else filteredText,
             isAnonimo = isAnonimoChat && !conversa.matchRevelado,
             iconeAnonimo = "🎭",
-            tipo = if (isAudio) "audio" else "texto",
+            tipo = tipo,
             audioUrl = audioLocalPath,
-            dataEnvio = Date()
+            dataEnvio = Date(),
+            replyToId = replyToId,
+            replyToText = replyToText,
+            pollQuestion = pollQuestion,
+            pollOptions = pollOptions,
+            pollVotes = emptyMap()
         )
 
         // Adiciona à lista de mensagens do chat
@@ -501,15 +569,36 @@ object RevelaRepository {
         val updatedMessages = chatList + newMessage
         _messages.value = _messages.value + (conversaId to updatedMessages)
 
-        // Atualiza conversa com última mensagem
-        updateConversationLastMessage(conversaId, newMessage.conteudo, newMessage.dataEnvio)
+        // Calcula Nível de Confiança e Streak (Foguinho do TikTok)
+        val currentCount = updatedMessages.size
+        val nextTrustLevel = if (currentCount >= 40) 5 else if (currentCount >= 24) 4 else if (currentCount >= 12) 3 else if (currentCount >= 6) 2 else 1
+        
+        // Simulação do aumento do foguinho do TikTok
+        val nextStreakCount = if (conversa.streakCount == 0) 1 else if (currentCount % 4 == 0) conversa.streakCount + 1 else conversa.streakCount
+
+        // Atualiza conversa com última mensagem, novos níveis de confiança e streaks
+        _conversations.value = _conversations.value.map {
+            if (it.conversaId == conversaId) {
+                it.copy(
+                    ultimaMensagem = newMessage.conteudo,
+                    ultimaMensagemData = newMessage.dataEnvio,
+                    unreadCount = 0,
+                    trustLevel = nextTrustLevel,
+                    streakCount = nextStreakCount
+                )
+            } else {
+                it
+            }
+        }
+
+        // Ganho de XP por interagir no chat! (Gamificação)
+        addXp(15)
 
         // Verifica metas de gamificação
         updateBadgeProgress("Mensageiro", 1)
         updateMissionsProgress()
 
         // --- SIMULAÇÃO DE AUTO-RESPOSTA / CHATBOT PARA O EMULADOR ---
-        // Permite ao usuário interagir e ver em tempo real o indicador "Mariana está digitando..." e responder
         val destinatarioId = conversa.participantes.find { it != current.uid } ?: ""
         val destinatario = _users.value[destinatarioId]
         if (destinatario != null && destinatarioId != "google_user_123") {
@@ -645,6 +734,46 @@ object RevelaRepository {
         }
 
         return Result.success(finalConversa)
+    }
+
+    suspend fun reactToMessage(conversaId: String, mensagemId: String, emoji: String): Result<Boolean> {
+        val current = _currentUser.value ?: return Result.failure(Exception("Não autenticado."))
+        val messagesList = _messages.value[conversaId] ?: return Result.failure(Exception("Conversa não encontrada."))
+        
+        val updatedList = messagesList.map { msg ->
+            if (msg.mensagemId == mensagemId) {
+                val updatedReactions = msg.reactions.toMutableMap()
+                if (updatedReactions[current.uid] == emoji) {
+                    updatedReactions.remove(current.uid)
+                } else {
+                    updatedReactions[current.uid] = emoji
+                }
+                msg.copy(reactions = updatedReactions)
+            } else {
+                msg
+            }
+        }
+        
+        _messages.value = _messages.value + (conversaId to updatedList)
+        return Result.success(true)
+    }
+
+    suspend fun voteInPoll(conversaId: String, mensagemId: String, optionIndex: Int): Result<Boolean> {
+        val current = _currentUser.value ?: return Result.failure(Exception("Não autenticado."))
+        val messagesList = _messages.value[conversaId] ?: return Result.failure(Exception("Conversa não encontrada."))
+        
+        val updatedList = messagesList.map { msg ->
+            if (msg.mensagemId == mensagemId && msg.tipo == "enquete") {
+                val updatedVotes = msg.pollVotes.toMutableMap()
+                updatedVotes[current.uid] = optionIndex
+                msg.copy(pollVotes = updatedVotes)
+            } else {
+                msg
+            }
+        }
+        
+        _messages.value = _messages.value + (conversaId to updatedList)
+        return Result.success(true)
     }
 
     suspend fun createNewConversation(outroUserId: String, isAnonimo: Boolean): Result<Conversation> {
