@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.util.Date
 import java.util.UUID
 
@@ -190,18 +191,97 @@ object RevelaRepository {
     // --- PALAVRAS PROIBIDAS PARA FILTRAGEM (REQUISITO DE SEGURANÇA 6) ---
     private val badWords = listOf("ofensa", "palavrao", "idiota", "lixo", "fake", "spam", "imbecil", "otario")
 
+    fun startFirebaseSync() {
+        scope.launch {
+            try {
+                val firebaseUid = FirebaseSync.getFirebaseUid()
+                if (firebaseUid != null) {
+                    Log.d("FirebaseSync_Revela", "Iniciando sincronização real com Firebase para o usuário $firebaseUid...")
+                    
+                    // 1. Carrega o perfil do usuário atual do Firestore
+                    val currentProfile = FirebaseSync.loadUserProfile(firebaseUid)
+                    if (currentProfile != null) {
+                        _currentUser.value = currentProfile
+                    }
+                    
+                    // 2. Carrega todos os usuários
+                    val allUsers = FirebaseSync.loadAllUsers()
+                    if (allUsers.isNotEmpty()) {
+                        _users.value = _users.value + allUsers.associateBy { it.uid }
+                    }
+                    
+                    // 3. Carrega posts reais
+                    val realPosts = FirebaseSync.loadAllPosts()
+                    if (realPosts.isNotEmpty()) {
+                        _posts.value = realPosts
+                    }
+                    
+                    // 4. Carrega as conversas do usuário logado
+                    val realConversations = FirebaseSync.loadUserConversations(firebaseUid)
+                    if (realConversations.isNotEmpty()) {
+                        _conversations.value = realConversations
+                        
+                        // 5. Carrega mensagens para cada conversa
+                        val updatedMessages = _messages.value.toMutableMap()
+                        for (conv in realConversations) {
+                            val messagesForConv = FirebaseSync.loadMessages(conv.conversaId)
+                            if (messagesForConv.isNotEmpty()) {
+                                updatedMessages[conv.conversaId] = messagesForConv
+                            }
+                        }
+                        _messages.value = updatedMessages
+                    }
+                    Log.d("FirebaseSync_Revela", "Sincronização real do Firebase finalizada com sucesso!")
+                }
+            } catch (e: Exception) {
+                Log.e("FirebaseSync_Revela", "Erro na sincronização automática do Firebase: ${e.message}")
+            }
+        }
+    }
+
     init {
         // Inicializa dados padrão para o aplicativo começar rico e interativo
         prepopulateData()
+        startFirebaseSync()
     }
 
     // --- 1. SISTEMA DE AUTENTICAÇÃO (MOCK FIREBASE AUTH) ---
 
     suspend fun loginWithEmail(email: String, password: String): Result<UserProfile> {
-        delay(1200) // Simula latência de rede do Firebase Auth
         if (email.isEmpty() || password.isEmpty()) {
             return Result.failure(Exception("E-mail e senha são obrigatórios."))
         }
+        
+        try {
+            Log.d("FirebaseSync_Revela", "Tentando autenticação via Firebase Auth real para $email...")
+            val authResult = com.google.firebase.auth.FirebaseAuth.getInstance()
+                .signInWithEmailAndPassword(email, password)
+                .await()
+            val firebaseUid = authResult.user?.uid ?: throw Exception("UID do Firebase retornado é nulo.")
+            
+            var userProfile = FirebaseSync.loadUserProfile(firebaseUid)
+            if (userProfile == null) {
+                val defaultApelido = email.substringBefore("@").lowercase().filter { it.isLetterOrDigit() }
+                userProfile = UserProfile(
+                    uid = firebaseUid,
+                    nome = email.substringBefore("@").replaceFirstChar { it.uppercase() },
+                    apelido = defaultApelido.ifEmpty { "user_${firebaseUid.take(5)}" },
+                    email = email,
+                    bio = "Olá! Acabei de me juntar ao Anonymous 🎭 via Firebase real!",
+                    isAdmin = (email == "frontwork08@gmail.com")
+                )
+                FirebaseSync.saveUserProfile(userProfile)
+            }
+            
+            _currentUser.value = userProfile
+            addUserToDatabase(userProfile)
+            startFirebaseSync()
+            return Result.success(userProfile)
+        } catch (e: Exception) {
+            Log.e("FirebaseSync_Revela", "Falha ou não configurado no Firebase real: ${e.message}. Usando simulador offline...")
+        }
+
+        delay(1200) // Simula latência de rede do Firebase Auth
         // Se for o admin tentando logar
         if (email == "frontwork08@gmail.com" && password == "Gui61199262@") {
             var adminUser = _users.value.values.find { it.email == email }
@@ -303,10 +383,34 @@ object RevelaRepository {
     }
 
     suspend fun registerWithEmail(email: String, password: String, nome: String, apelido: String): Result<UserProfile> {
-        delay(1500)
         if (email.isEmpty() || password.isEmpty() || nome.isEmpty() || apelido.isEmpty()) {
             return Result.failure(Exception("Preencha todos os campos obrigatórios."))
         }
+        
+        try {
+            Log.d("FirebaseSync_Revela", "Tentando registro de conta no Firebase Auth real...")
+            val authResult = com.google.firebase.auth.FirebaseAuth.getInstance()
+                .createUserWithEmailAndPassword(email, password)
+                .await()
+            val firebaseUid = authResult.user?.uid ?: throw Exception("ID de usuário retornado pelo Firebase está vazio.")
+            
+            val newUser = UserProfile(
+                uid = firebaseUid,
+                nome = nome,
+                apelido = apelido,
+                email = email,
+                bio = "Olá! Acabei de me juntar ao Anonymous 🎭 via Firebase!"
+            )
+            FirebaseSync.saveUserProfile(newUser)
+            addUserToDatabase(newUser)
+            _currentUser.value = newUser
+            startFirebaseSync()
+            return Result.success(newUser)
+        } catch (e: Exception) {
+            Log.e("FirebaseSync_Revela", "Falha ou não configurado no Firebase real: ${e.message}. Criando conta via simulador offline...")
+        }
+
+        delay(1500)
         if (_users.value.values.any { it.apelido.lowercase() == apelido.lowercase() }) {
             return Result.failure(Exception("O apelido/username @$apelido já está em uso."))
         }
@@ -325,6 +429,11 @@ object RevelaRepository {
     }
 
     fun logout() {
+        try {
+            com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
+        } catch (e: Exception) {
+            Log.e("FirebaseSync_Revela", "Erro ao deslogar do Firebase real: ${e.message}")
+        }
         _currentUser.value = null
     }
 
@@ -410,6 +519,11 @@ object RevelaRepository {
         _posts.value = listOf(newPost) + _posts.value
         _comments.value = _comments.value + (newPost.postId to emptyList())
 
+        // Salva post real no Firebase
+        scope.launch {
+            FirebaseSync.savePost(newPost)
+        }
+
         // Gamificação
         updateBadgeProgress("Popular", 1) // Progresso para o dono
         updateMissionsProgress()
@@ -465,6 +579,11 @@ object RevelaRepository {
 
         val currentComments = _comments.value[postId] ?: emptyList()
         _comments.value = _comments.value + (postId to (currentComments + newComment))
+
+        // Salva comentário real no Firebase
+        scope.launch {
+            FirebaseSync.saveComment(newComment)
+        }
 
         // Se comentou na postagem de outra pessoa, notifica
         if (post.usuarioId != current.uid) {
@@ -579,6 +698,11 @@ object RevelaRepository {
         val updatedMessages = chatList + newMessage
         _messages.value = _messages.value + (conversaId to updatedMessages)
 
+        // Salva mensagem real no Firebase
+        scope.launch {
+            FirebaseSync.saveMessage(newMessage)
+        }
+
         // Calcula Nível de Confiança e Streak (Foguinho do TikTok)
         val currentCount = updatedMessages.size
         val nextTrustLevel = if (currentCount >= 40) 5 else if (currentCount >= 24) 4 else if (currentCount >= 12) 3 else if (currentCount >= 6) 2 else 1
@@ -589,13 +713,18 @@ object RevelaRepository {
         // Atualiza conversa com última mensagem, novos níveis de confiança e streaks
         _conversations.value = _conversations.value.map {
             if (it.conversaId == conversaId) {
-                it.copy(
+                val updated = it.copy(
                     ultimaMensagem = newMessage.conteudo,
                     ultimaMensagemData = newMessage.dataEnvio,
                     unreadCount = 0,
                     trustLevel = nextTrustLevel,
                     streakCount = nextStreakCount
                 )
+                // Salva a conversa atualizada no Firebase
+                scope.launch {
+                    FirebaseSync.saveConversation(updated)
+                }
+                updated
             } else {
                 it
             }
@@ -654,6 +783,11 @@ object RevelaRepository {
         val currentReports = _reports.value.toMutableList()
         currentReports.add(0, newReport)
         _reports.value = currentReports
+
+        // Salva denúncia real no Firebase
+        scope.launch {
+            FirebaseSync.saveReport(newReport)
+        }
         
         // Executa a análise com Gemini em segundo plano
         scope.launch {
@@ -823,6 +957,11 @@ object RevelaRepository {
 
         _conversations.value = listOf(nova) + _conversations.value
         _messages.value = _messages.value + (novaId to emptyList())
+
+        // Salva conversa real no Firebase
+        scope.launch {
+            FirebaseSync.saveConversation(nova)
+        }
 
         return Result.success(nova)
     }
