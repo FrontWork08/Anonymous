@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
 import com.example.data.Conversation
 import com.example.data.RevelaRepository
+import com.example.data.CryptoUtils
 import com.example.ui.theme.ImmersiveLavender
 import com.example.ui.theme.RevelaCoral
 import com.example.ui.theme.RevelaPurple
@@ -303,14 +304,29 @@ fun ConversationsScreen(
                                     )
                                 }
 
-                                Text(
-                                    text = conversa.ultimaMensagem.ifEmpty { "Sem mensagens" },
-                                    fontSize = 13.sp,
-                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
+                                val rawMsg = conversa.ultimaMensagem
+                                val decryptedMsg = CryptoUtils.decrypt(rawMsg)
+                                val isEncrypted = rawMsg.isNotEmpty() && rawMsg != decryptedMsg
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.padding(top = 4.dp)
-                                )
+                                ) {
+                                    if (isEncrypted) {
+                                        Text(
+                                            text = "🔒 ",
+                                            fontSize = 11.sp,
+                                            color = RevelaPurple
+                                        )
+                                    }
+                                    Text(
+                                        text = decryptedMsg.ifEmpty { "Sem mensagens" },
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
 
                                 // Indicadores de chat
                                 Row(
@@ -381,19 +397,6 @@ fun ConversationsScreen(
                                                     color = ImmersiveLavender
                                                 )
                                             }
-                                        }
-                                        if (false) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .background(RevelaPurple.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
-                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                                            ) {
-                                            Text(
-                                                text = "Progresso: ${minOf(messageCount, 5)}/5 🎭",
-                                                fontSize = 8.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = ImmersiveLavender
-                                            )
                                         }
                                     }
                                 }

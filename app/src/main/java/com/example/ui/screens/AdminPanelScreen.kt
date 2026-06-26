@@ -29,6 +29,7 @@ import com.example.data.Conversation
 import com.example.data.RevelaRepository
 import com.example.data.UserProfile
 import com.example.data.UserReport
+import com.example.data.CryptoUtils
 import com.example.ui.theme.RevelaCoral
 import com.example.ui.theme.RevelaPurple
 import com.example.ui.theme.RevelaTurquoise
@@ -753,8 +754,9 @@ fun AdminPanelScreen() {
                                                             )
                                                         }
                                                     }
+                                                    val decryptedLast = CryptoUtils.decrypt(conv.ultimaMensagem)
                                                     Text(
-                                                        text = "Última: ${conv.ultimaMensagem.ifEmpty { "Sem conteúdo" }}",
+                                                        text = "Última: ${decryptedLast.ifEmpty { "Sem conteúdo" }}",
                                                         fontSize = 12.sp,
                                                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                                                         maxLines = 1,
@@ -868,11 +870,22 @@ fun AdminPanelScreen() {
                                                             fontWeight = FontWeight.Bold,
                                                             color = if (msg.isAnonimo) RevelaYellow else RevelaTurquoise
                                                         )
-                                                        Text(
-                                                            text = msg.conteudo,
-                                                            fontSize = 14.sp,
-                                                            color = MaterialTheme.colorScheme.onBackground
-                                                        )
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            val decryptedContent = CryptoUtils.decrypt(msg.conteudo)
+                                                            val isEncrypted = msg.conteudo.isNotEmpty() && msg.conteudo != decryptedContent
+                                                            if (isEncrypted) {
+                                                                Text(
+                                                                    text = "🔒 ",
+                                                                    fontSize = 11.sp,
+                                                                    color = RevelaPurple
+                                                                )
+                                                            }
+                                                            Text(
+                                                                text = decryptedContent,
+                                                                fontSize = 14.sp,
+                                                                color = MaterialTheme.colorScheme.onBackground
+                                                            )
+                                                        }
                                                         HorizontalDivider(
                                                             modifier = Modifier.padding(top = 4.dp),
                                                             color = Color.White.copy(alpha = 0.05f)

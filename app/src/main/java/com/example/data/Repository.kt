@@ -522,7 +522,16 @@ object RevelaRepository {
             }
         }
 
-        val percentage = ((matches.toFloat() / (user1.interesses.size + user1.vibes.size)) * 100).toInt()
+        var percentage = ((matches.toFloat() / (user1.interesses.size + user1.vibes.size)) * 100).toInt()
+
+        // Bônus de Streak (Foguinho) - Requisito 1 & 3: Influência no sistema de revelação e compatibilidade
+        val conv = _conversations.value.find { 
+            it.participantes.contains(user1.uid) && it.participantes.contains(user2.uid) 
+        }
+        if (conv != null && conv.streakCount >= 7) {
+            percentage += 10 // +10% de compatibilidade após 7 dias de sequência
+        }
+
         return percentage.coerceIn(45, 99) // score stays between 45% and 99% for realism
     }
 
@@ -547,18 +556,19 @@ object RevelaRepository {
         // Encriptação simulada em servidor (Requisito 5)
         Log.d("Security_Revela", "Criptografando mensagem no servidor para conversa $conversaId...")
 
+        val rawConteudo = if (tipo == "audio") "🎵 Mensagem de Voz" else if (tipo == "enquete") "📊 Enquete: $pollQuestion" else if (tipo == "imagem_preset") "🖼️ Imagem Compartilhada" else filteredText
         val newMessage = ChatMessage(
             mensagemId = UUID.randomUUID().toString(),
             conversaId = conversaId,
             remetenteId = if (isAnonimoChat && !conversa.matchRevelado) null else current.uid,
-            conteudo = if (tipo == "audio") "🎵 Mensagem de Voz" else if (tipo == "enquete") "📊 Enquete: $pollQuestion" else if (tipo == "imagem_preset") "🖼️ Imagem Compartilhada" else filteredText,
+            conteudo = CryptoUtils.encrypt(rawConteudo),
             isAnonimo = isAnonimoChat && !conversa.matchRevelado,
             iconeAnonimo = "🎭",
             tipo = tipo,
             audioUrl = audioLocalPath,
             dataEnvio = Date(),
             replyToId = replyToId,
-            replyToText = replyToText,
+            replyToText = replyToText?.let { CryptoUtils.encrypt(it) },
             pollQuestion = pollQuestion,
             pollOptions = pollOptions,
             pollVotes = emptyMap()
@@ -701,7 +711,7 @@ object RevelaRepository {
             updated.copy(
                 matchRevelado = true,
                 tipo = "normal",
-                ultimaMensagem = "🎉 Identidades Reveladas! É um Match!"
+                ultimaMensagem = CryptoUtils.encrypt("🎉 Identidades Reveladas! É um Match!")
             )
         } else {
             updated
@@ -723,7 +733,7 @@ object RevelaRepository {
                 mensagemId = UUID.randomUUID().toString(),
                 conversaId = conversaId,
                 remetenteId = "system",
-                conteudo = "🎉 Identidade Revelada! Vocês agora podem ver as fotos de perfil um do outro! ✨ Divirtam-se!",
+                conteudo = CryptoUtils.encrypt("🎉 Identidade Revelada! Vocês agora podem ver as fotos de perfil um do outro! ✨ Divirtam-se!"),
                 isAnonimo = false,
                 dataEnvio = Date()
             )
@@ -731,6 +741,18 @@ object RevelaRepository {
             
             // Gamificação
             updateBadgeProgress("Revelado", 1)
+
+            // Recompensa especial por Streak longo (Requisito de Gamificação & Foguinhos)
+            if (conversa.streakCount >= 30) {
+                updateBadgeProgress("Streak30", 1)
+                addXp(500)
+                sendNotification(current.uid, "reward", "🎁 Recompensa Premium: Bônus de 500 XP e Badge Sintonia de Ouro pela revelação com sequência de 30 dias! 👑")
+                sendNotification(outroId, "reward", "🎁 Recompensa Premium: Bônus de 500 XP e Badge Sintonia de Ouro pela revelação com sequência de 30 dias! 👑")
+            } else if (conversa.streakCount >= 7) {
+                addXp(150)
+                sendNotification(current.uid, "reward", "🎁 Recompensa Especial: Bônus de 150 XP pela revelação com sequência de 7 dias! 💥")
+                sendNotification(outroId, "reward", "🎁 Recompensa Especial: Bônus de 150 XP pela revelação com sequência de 7 dias! 💥")
+            }
         }
 
         return Result.success(finalConversa)
@@ -789,11 +811,12 @@ object RevelaRepository {
         }
 
         val novaId = UUID.randomUUID().toString()
+        val defaultMsg = if (isAnonimo) "🎭 Chat Anônimo criado" else "💬 Chat Normal criado"
         val nova = Conversation(
             conversaId = novaId,
             tipo = if (isAnonimo) "anonimo" else "normal",
             participantes = listOf(current.uid, outroUserId),
-            ultimaMensagem = if (isAnonimo) "🎭 Chat Anônimo criado" else "💬 Chat Normal criado",
+            ultimaMensagem = CryptoUtils.encrypt(defaultMsg),
             ultimaMensagemData = Date(),
             matchRevelado = false
         )
@@ -850,6 +873,8 @@ object RevelaRepository {
                     "Mensageiro" -> true // Ativa ao mandar mensagem
                     "Revelado" -> true // Ativa no Match
                     "Popular" -> true
+                    "Streak30" -> true
+                    "Streak100" -> true
                     else -> false
                 }
                 badge.copy(earned = isEarned)
@@ -890,7 +915,7 @@ object RevelaRepository {
                 mensagemId = UUID.randomUUID().toString(),
                 conversaId = conversaId,
                 remetenteId = if (conversa.tipo == "anonimo" && !conversa.matchRevelado) null else receptor.uid,
-                conteudo = content,
+                conteudo = CryptoUtils.encrypt(content),
                 isAnonimo = conversa.tipo == "anonimo" && !conversa.matchRevelado,
                 iconeAnonimo = "🎭",
                 dataEnvio = Date()
@@ -1056,7 +1081,9 @@ object RevelaRepository {
         _badges.value = listOf(
             UserBadge("Mensageiro", "Mensageiro", "Enviou 10 mensagens em chats", "💬", false),
             UserBadge("Revelado", "Revelado", "Realizou 3 desmascaramentos (Matches)", "🎭", false),
-            UserBadge("Popular", "Popular", "Recebeu 50 curtidas nos seus posts", "🔥", false)
+            UserBadge("Popular", "Popular", "Recebeu 50 curtidas nos seus posts", "🔥", false),
+            UserBadge("Streak30", "Sintonia de Ouro", "Manteve uma sequência de 30 dias!", "🔮", false),
+            UserBadge("Streak100", "Lenda Flamejante", "Manteve uma sequência de 100 dias!", "👑", false)
         )
 
         // 5. Missões Diárias
@@ -1070,15 +1097,20 @@ object RevelaRepository {
             conversaId = "conv_1",
             tipo = "normal",
             participantes = listOf("mari_uid", "lipe_uid"),
-            ultimaMensagem = "Opa! Manda essa playlist nova por direct depois, Mari!",
-            ultimaMensagemData = Date()
+            ultimaMensagem = CryptoUtils.encrypt("Opa! Manda essa playlist nova por direct depois, Mari!"),
+            ultimaMensagemData = Date(),
+            streakCount = 5,
+            trustLevel = 5
         )
         val conv2 = Conversation(
             conversaId = "conv_2",
             tipo = "anonimo",
             participantes = listOf("ana_uid", "lipe_uid"),
-            ultimaMensagem = "Gostei muito das suas indicações de livros clássicos!",
-            ultimaMensagemData = Date()
+            ultimaMensagem = CryptoUtils.encrypt("Gostei muito das suas indicações de livros clássicos!"),
+            ultimaMensagemData = Date(),
+            streakCount = 12,
+            streakExpiring = true,
+            trustLevel = 4
         )
 
         _conversations.value = listOf(conv1, conv2)
@@ -1088,21 +1120,21 @@ object RevelaRepository {
             mensagemId = "m1",
             conversaId = "conv_1",
             remetenteId = "mari_uid",
-            conteudo = "Oi Lipe! Vi seu post do setup novo, ficou sensacional!",
+            conteudo = CryptoUtils.encrypt("Oi Lipe! Vi seu post do setup novo, ficou sensacional!"),
             isAnonimo = false
         )
         val msg2 = ChatMessage(
             mensagemId = "m2",
             conversaId = "conv_1",
             remetenteId = "lipe_uid",
-            conteudo = "Valeu Mari! Deu um trabalhão arrumar os cabos kkk",
+            conteudo = CryptoUtils.encrypt("Valeu Mari! Deu um trabalhão arrumar os cabos kkk"),
             isAnonimo = false
         )
         val msg3 = ChatMessage(
             mensagemId = "m3",
             conversaId = "conv_1",
             remetenteId = "mari_uid",
-            conteudo = "Imagino! E aquela playlist que você pediu, vou te mandar sim.",
+            conteudo = CryptoUtils.encrypt("Imagino! E aquela playlist que você pediu, vou te mandar sim."),
             isAnonimo = false
         )
 
@@ -1110,21 +1142,21 @@ object RevelaRepository {
             mensagemId = "m4",
             conversaId = "conv_2",
             remetenteId = null, // Anônimo
-            conteudo = "Oi! Vi que você curte livros físicos. Qual o seu autor favorito?",
+            conteudo = CryptoUtils.encrypt("Oi! Vi que você curte livros físicos. Qual o seu autor favorito?"),
             isAnonimo = true
         )
         val msg5 = ChatMessage(
             mensagemId = "m5",
             conversaId = "conv_2",
             remetenteId = "lipe_uid",
-            conteudo = "Olá! Ah, eu gosto muito de ficção científica e fantasia, tipo Tolkien.",
+            conteudo = CryptoUtils.encrypt("Olá! Ah, eu gosto muito de ficção científica e fantasia, tipo Tolkien."),
             isAnonimo = false
         )
         val msg6 = ChatMessage(
             mensagemId = "m6",
             conversaId = "conv_2",
             remetenteId = null, // Anônimo
-            conteudo = "Gostei muito das suas indicações de livros clássicos!",
+            conteudo = CryptoUtils.encrypt("Gostei muito das suas indicações de livros clássicos!"),
             isAnonimo = true
         )
 

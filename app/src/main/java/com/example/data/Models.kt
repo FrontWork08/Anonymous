@@ -82,6 +82,7 @@ data class Conversation(
     val revelouUid2: Boolean = false,
     val unreadCount: Int = 0,
     val streakCount: Int = 0,
+    val streakExpiring: Boolean = false,
     val trustLevel: Int = 1,
     val solicitouRevelacaoUid1: Boolean = false,
     val solicitouRevelacaoUid2: Boolean = false

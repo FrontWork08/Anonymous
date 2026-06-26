@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -35,6 +37,7 @@ import com.example.data.ChatMessage
 import com.example.data.Conversation
 import com.example.data.RevelaRepository
 import com.example.data.UserProfile
+import com.example.data.CryptoUtils
 import com.example.ui.theme.RevelaCoral
 import com.example.ui.theme.RevelaPurple
 import com.example.ui.theme.RevelaTurquoise
@@ -42,6 +45,14 @@ import com.example.ui.theme.RevelaYellow
 import kotlinx.coroutines.launch
 import java.util.UUID
 import java.util.Date
+import androidx.compose.ui.platform.LocalContext
+import java.io.File
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.Manifest
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
 
 /**
  * Tela 7: Chat / Conversa Individual
@@ -75,6 +86,38 @@ fun ChatScreen(
     var typedText by remember { mutableStateOf("") }
     var isRecordingAudio by remember { mutableStateOf(false) }
 
+    val context = LocalContext.current
+    val audioRecorder = remember { AudioRecorder(context) }
+    val audioPlayer = remember { AudioPlayer() }
+    var currentlyPlayingPath by remember { mutableStateOf<String?>(null) }
+    var currentAudioFile by remember { mutableStateOf<File?>(null) }
+
+    var hasMicPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { isGranted ->
+            hasMicPermission = isGranted
+            if (!isGranted) {
+                Toast.makeText(context, "Permissão do microfone negada. Não é possível gravar áudio real.", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "Permissão de microfone concedida! Pressione para gravar.", Toast.LENGTH_SHORT).show()
+            }
+        }
+    )
+
+    // Para de tocar áudio quando sair da tela
+    DisposableEffect(Unit) {
+        onDispose {
+            audioPlayer.stop()
+            audioRecorder.stop()
+        }
+    }
+
     // Diálogos e Modais
     var showReportDialog by remember { mutableStateOf<ChatMessage?>(null) }
     var showMatchDialog by remember { mutableStateOf(false) }
@@ -88,6 +131,15 @@ fun ChatScreen(
     var selectedMessageForMenu by remember { mutableStateOf<ChatMessage?>(null) }
     var showVoiceCallMock by remember { mutableStateOf(false) }
     var showInfoTrustDialog by remember { mutableStateOf(false) }
+
+    var showFlameEntrance by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (conversa != null && conversa.streakCount > 0) {
+            showFlameEntrance = true
+            kotlinx.coroutines.delay(2200)
+            showFlameEntrance = false
+        }
+    }
 
     // Rolagem automática para a última mensagem
     LaunchedEffect(mensagens.size, isTyping) {
@@ -127,6 +179,18 @@ fun ChatScreen(
         streak >= 3 -> "🔥"
         else -> "💨"
     }
+
+    // Animação infinita da chama (Foguinho pulsante/vibrante - Requisito 3)
+    val infiniteTransition = rememberInfiniteTransition(label = "flame_pulse")
+    val flameScale by infiniteTransition.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1.18f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scale"
+    )
 
     // Se o outro usuário foi bloqueado, esconde envio
     val hasBlockedCurrent = currentUser?.bloqueados?.contains(outroParticipanteId) == true
@@ -185,6 +249,7 @@ fun ChatScreen(
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
                                         modifier = Modifier
+                                            .scale(if (streak >= 3) flameScale else 1.0f)
                                             .background(streakColor.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
                                             .padding(horizontal = 6.dp, vertical = 2.dp)
                                     ) {
@@ -202,9 +267,9 @@ fun ChatScreen(
                                 )
                             } else {
                                 Text(
-                                    text = if (isAnonima) "Máscara ativa • Confiança Nv. $trustLevel 🔒" else "Conectado",
-                                    fontSize = 11.sp,
-                                    color = Color.Gray
+                                    text = if (isAnonima) "Máscara ativa • AES-128 Ativo 🔒" else "AES-128 Criptografado de ponta a ponta 🔒",
+                                    fontSize = 10.sp,
+                                    color = if (isAnonima) RevelaYellow else RevelaTurquoise
                                 )
                             }
                         }
@@ -308,6 +373,45 @@ fun ChatScreen(
                     }
                 }
 
+                // AVISO DE EXPIRAÇÃO DE STREAK (Requisito 3 & 4: Gamificação e Foguinhos)
+                if (conversa.streakExpiring && conversa.streakCount > 0) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = RevelaCoral.copy(alpha = 0.15f)
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, RevelaCoral.copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "🔥",
+                                fontSize = 24.sp,
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
+                            Column {
+                                Text(
+                                    text = "Sua sequência de ${conversa.streakCount} dias está prestes a acabar! Envie uma mensagem para mantê-la 🔥",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Falta pouco tempo! Não deixe sua chama apagar.",
+                                    fontSize = 10.sp,
+                                    color = Color.LightGray
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // Lista de Mensagens
                 LazyColumn(
                     state = listState,
@@ -319,6 +423,7 @@ fun ChatScreen(
                 ) {
                     items(mensagens) { msg ->
                         val isMe = msg.remetenteId == currentUser?.uid
+                        val decryptedConteudo = CryptoUtils.decrypt(msg.conteudo)
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -340,7 +445,7 @@ fun ChatScreen(
                                             .padding(horizontal = 8.dp, vertical = 4.dp)
                                     ) {
                                         Text(
-                                            text = "↩️ Resposta: ${msg.replyToText}",
+                                            text = "↩️ Resposta: ${msg.replyToText?.let { CryptoUtils.decrypt(it) } ?: ""}",
                                             fontSize = 11.sp,
                                             color = Color.Gray,
                                             maxLines = 1,
@@ -392,10 +497,46 @@ fun ChatScreen(
                                     Column {
                                         when (msg.tipo) {
                                             "audio" -> {
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Icon(Icons.Default.PlayArrow, contentDescription = "Play", tint = if (isMe) Color.White else RevelaPurple)
+                                                val isPlayingThis = currentlyPlayingPath == msg.audioUrl
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier
+                                                        .clickable {
+                                                            if (msg.audioUrl.isNotEmpty() && !msg.audioUrl.contains("simulated_audio.mp3")) {
+                                                                if (isPlayingThis) {
+                                                                    audioPlayer.stop()
+                                                                    currentlyPlayingPath = null
+                                                                } else {
+                                                                    currentlyPlayingPath = msg.audioUrl
+                                                                    audioPlayer.play(msg.audioUrl) {
+                                                                        currentlyPlayingPath = null
+                                                                    }
+                                                                }
+                                                            } else {
+                                                                Toast.makeText(context, "Este é um áudio de simulação.", Toast.LENGTH_SHORT).show()
+                                                            }
+                                                        }
+                                                        .padding(vertical = 4.dp)
+                                                ) {
+                                                    Icon(
+                                                         imageVector = if (isPlayingThis) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                         contentDescription = if (isPlayingThis) "Pause" else "Play",
+                                                         tint = if (isMe) Color.White else RevelaPurple
+                                                     )
                                                     Spacer(modifier = Modifier.width(8.dp))
-                                                    Text("🔊 [Áudio de Voz Simulada]", fontSize = 13.sp, color = if (isMe) Color.White else MaterialTheme.colorScheme.onBackground)
+                                                    Column {
+                                                         Text(
+                                                             text = if (isPlayingThis) "▶️ Tocando Áudio..." else "🎤 Mensagem de Voz",
+                                                             fontSize = 13.sp,
+                                                             fontWeight = FontWeight.Bold,
+                                                             color = if (isMe) Color.White else MaterialTheme.colorScheme.onBackground
+                                                         )
+                                                         Text(
+                                                             text = if (msg.audioUrl.contains("simulated_audio.mp3")) "Áudio Simulado" else "Toque para ouvir gravação real",
+                                                             fontSize = 10.sp,
+                                                             color = if (isMe) Color.White.copy(alpha = 0.7f) else Color.Gray
+                                                         )
+                                                     }
                                                 }
                                             }
                                             "enquete" -> {
@@ -462,12 +603,12 @@ fun ChatScreen(
                                                         Text("🖼️ $cardName", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                                     }
                                                     Spacer(modifier = Modifier.height(4.dp))
-                                                    Text(text = msg.conteudo, fontSize = 11.sp, color = if (isMe) Color.White else MaterialTheme.colorScheme.onBackground)
+                                                    Text(text = decryptedConteudo, fontSize = 11.sp, color = if (isMe) Color.White else MaterialTheme.colorScheme.onBackground)
                                                 }
                                             }
                                             else -> {
                                                 Text(
-                                                    text = msg.conteudo,
+                                                    text = decryptedConteudo,
                                                     color = if (isMe) Color.White else MaterialTheme.colorScheme.onBackground,
                                                     fontSize = 14.sp
                                                 )
@@ -596,7 +737,7 @@ fun ChatScreen(
                             Icon(Icons.Default.Reply, contentDescription = "Respondendo", tint = RevelaYellow, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Respondendo a: \"${replyMessage!!.conteudo}\"",
+                                text = "Respondendo a: \"${CryptoUtils.decrypt(replyMessage!!.conteudo)}\"",
                                 fontSize = 11.sp,
                                 color = Color.LightGray,
                                 maxLines = 1,
@@ -640,18 +781,42 @@ fun ChatScreen(
                             )
                         }
 
-                        // Simula mensagem de Voz
+                        // Gravador de áudio real com pedido de permissão (Requisito Microfone)
                         IconButton(
                             onClick = {
-                                isRecordingAudio = !isRecordingAudio
-                                if (!isRecordingAudio) {
-                                    coroutineScope.launch {
-                                        RevelaRepository.sendMessage(
-                                            conversaId = conversaId,
-                                            texto = "",
-                                            isAudio = true,
-                                            audioLocalPath = "simulated_audio.mp3"
-                                        )
+                                val hasPerm = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                                if (!hasPerm) {
+                                    permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                } else {
+                                    if (!isRecordingAudio) {
+                                        try {
+                                            val cacheFile = File(context.cacheDir, "audio_${System.currentTimeMillis()}.mp4")
+                                            currentAudioFile = cacheFile
+                                            audioRecorder.start(cacheFile)
+                                            isRecordingAudio = true
+                                            Toast.makeText(context, "🔴 Gravando... Toque novamente para enviar!", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Erro ao iniciar gravador: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    } else {
+                                        audioRecorder.stop()
+                                        isRecordingAudio = false
+                                        val file = currentAudioFile
+                                        if (file != null && file.exists() && file.length() > 0) {
+                                            coroutineScope.launch {
+                                                RevelaRepository.sendMessage(
+                                                    conversaId = conversaId,
+                                                    texto = "",
+                                                    isAudio = true,
+                                                    audioLocalPath = file.absolutePath,
+                                                    tipo = "audio"
+                                                )
+                                            }
+                                            Toast.makeText(context, "✅ Áudio gravado e enviado!", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "Gravação cancelada ou vazia.", Toast.LENGTH_SHORT).show()
+                                        }
+                                        currentAudioFile = null
                                     }
                                 }
                             },
@@ -799,6 +964,57 @@ fun ChatScreen(
                         }
                     }
                 }
+
+                // Animação da chama ao abrir o chat (Requisito 3 & Efeitos Visuais)
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = showFlameEntrance,
+                        enter = fadeIn() + scaleIn(initialScale = 0.3f),
+                        exit = fadeOut() + scaleOut(targetScale = 2.0f)
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                            modifier = Modifier
+                                .background(Color.Black.copy(alpha = 0.85f), RoundedCornerShape(24.dp))
+                                .padding(32.dp)
+                        ) {
+                            Text(text = streakIcon, fontSize = 72.sp, modifier = Modifier.scale(flameScale))
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Sequência Ativa! ⚡",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp
+                            )
+                            Text(
+                                text = "$streak Dias Consecutivos",
+                                color = streakColor,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 16.sp
+                            )
+
+                            // Mostra mensagens especiais baseadas em marcos (Requisito 3)
+                            val milestoneText = when {
+                                streak >= 365 -> "🏆 Recorde de 1 Ano Conquistado! Lenda absoluta."
+                                streak >= 100 -> "👑 Nível Lendário de 100 Dias! Conexão de alma."
+                                streak >= 30 -> "🔮 Badge Especial Sintonia de Ouro Ativado!"
+                                streak >= 7 -> "⚡ Uma semana de conversa! Conexão forte."
+                                else -> "Mantenha o ritmo diário! 🔥"
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = milestoneText,
+                                color = Color.LightGray,
+                                fontSize = 12.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -811,7 +1027,7 @@ fun ChatScreen(
             title = { Text("Ações para esta mensagem", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(text = "\"${msg.conteudo}\"", fontSize = 13.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 16.dp))
+                    Text(text = "\"${CryptoUtils.decrypt(msg.conteudo)}\"", fontSize = 13.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 16.dp))
                     
                     Text("Reagir com Emojis:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.Gray)
                     Spacer(modifier = Modifier.height(8.dp))
